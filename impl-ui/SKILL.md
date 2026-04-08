@@ -101,3 +101,47 @@ mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
 ```
 
 Write this report to `~/.claude/skill-output/$REPO/$BRANCH/impl-report-$TS.md` so the next agent can read what was built, what tests are needed, and what to run next.
+
+## Step 5: Update Repo Learnings
+
+After implementation, capture anything new or surprising discovered during the work. Read the existing learnings files that may need updating:
+
+```bash
+REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
+```
+
+For each category, consider whether to add entries:
+
+**`gotchas.md` — add if:**
+- You hit a trap that wasn't already documented (e.g., a hook that must be called in a specific order, a component prop that behaves unexpectedly, an import that causes a circular dependency)
+- You found a `// HACK`, `// NOTE`, or `// FIXME` comment while reading code that isn't captured yet
+- A deviation from pattern was necessary and the reason is non-obvious
+
+**`ui-patterns.md` — add if:**
+- You established a new pattern that didn't exist before (new data hook shape, new component composition style)
+- You discovered an existing pattern that wasn't documented
+
+**`standards.md` — add if:**
+- A tooling constraint caused a non-obvious fix (e.g., `exactOptionalPropertyTypes` required a specific workaround, an ESLint rule forced a non-obvious import style)
+
+**`file-structure.md` — add if:**
+- You created files in a location that wasn't previously described
+- The placement decision was non-obvious
+
+Only write entries that would save future work. Do not add entries that are already present or that merely restate the obvious.
+
+If there is nothing new to add, skip the file write and note:
+```
+✓ No learnings updates — implementation followed established patterns.
+```
+
+Otherwise, append new entries to the relevant files. Format new gotcha entries as:
+```markdown
+### {short title}
+{1-2 sentence description of the trap or pattern}
+**Where:** {file or feature area}
+**Fix/approach:** {what to do instead}
+```
+
+Update `index.md` `Last analyzed` date to today if any files were updated.

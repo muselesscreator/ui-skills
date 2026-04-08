@@ -1,6 +1,6 @@
 ---
 name: cleanup-ui
-description: Cleanup phase for UI code on the current branch. Runs lint fix, type-check, removes dead code, enforces comment standards. Calls cleanup-unit-tests and cleanup-e2e-tests if test files are touched. Use when finishing a feature branch or fixing lint and type errors.
+description: Cleanup phase for UI code on the current branch. Runs lint fix, type-check, removes dead code. Calls cleanup-unit-tests and cleanup-e2e-tests if test files are touched. Use when finishing a feature branch or fixing lint and type errors.
 version: 1.0.0
 triggers:
   explicit:
@@ -23,13 +23,35 @@ confidence_threshold: 80
 ## Step 1: Determine Scope
 
 If a path argument is given: scope to that path.
-Otherwise: get the list of changed files on the current branch.
+Otherwise: resolve changed files using the first source that returns results:
 
 ```bash
-git diff --name-only $(git merge-base HEAD main)..HEAD
+# 1. Committed changes ahead of main
+CHANGED=$(git diff --name-only $(git merge-base HEAD main) HEAD 2>/dev/null)
+# 2. Staged changes (committed ahead = 0 but staged)
+[ -z "$CHANGED" ] && CHANGED=$(git diff --name-only --cached)
+# 3. Unstaged + untracked changes (branch with no commits yet)
+[ -z "$CHANGED" ] && CHANGED=$(git status --short | grep -v '^?? \.claude\|^?? \.cursor\|^?? thoughts/\|^?? specs/' | awk '{print $2}')
+echo "$CHANGED"
+```
+
+Extract the unique package directories from the changed files to scope lint to only affected packages:
+
+```bash
+echo "$CHANGED" | sed 's|/src/.*||' | sort -u
 ```
 
 ## Step 2: Lint Fix
+
+Run lint fix scoped to affected packages only (faster than full-repo):
+
+```bash
+# Build --filter flags from changed package paths
+# e.g. if apps/app/src/foo.ts changed, run: pnpm --filter @eli/app lint:fix
+# Fall back to pnpm lint:fix if package mapping is unclear
+```
+
+Always run lint:fix **after all manual edits are complete** — running it mid-edit may auto-format partially-added imports incorrectly.
 
 ```bash
 pnpm lint:fix 2>&1 | tee /tmp/lint-output.txt
@@ -44,6 +66,8 @@ pnpm type-check 2>&1 | tee /tmp/type-check-output.txt
 ```
 
 For each type error: read the file, understand the error, apply the fix. Do not use `as` casts or `any` to silence errors — fix the underlying type issue.
+
+**NEVER prefix unused variables with `_` to suppress errors.** If something is unused, delete it. Underscore-prefixed dead code is still dead code — it creates false impressions that the variable is intentionally unused-but-kept, which causes future bugs and confusion.
 
 If a type error requires an architectural decision (e.g., a type is genuinely wrong at the domain level), surface it rather than guessing:
 ```
@@ -64,20 +88,14 @@ For each changed file in scope:
 - Empty `catch` blocks
 - `TODO` comments older than the current branch (leave new ones)
 
-Remove dead code. Do not prefix unused variables with `_` to suppress warnings — delete them.
+Remove dead code. **NEVER prefix unused variables with `_` to suppress warnings — delete them entirely.** Underscore prefixes leave dead code in place and mislead future readers into thinking the variable is intentionally unused-but-kept.
 
-## Step 5: Comment Standards
+## Step 5: Check for Test Files in Scope
 
-For each comment in changed files:
-- Comments that explain WHAT the code does: remove (code should be self-evident)
-- Comments that explain WHY: keep
-- `// TODO: ticket-number` format: keep
-- `// HACK:`, `// NOTE:`, `// IMPORTANT:` with explanation: keep
-
-## Step 6: Check for Test Files in Scope
+Use the same `$CHANGED` list from Step 1 (do not re-run git diff).
 
 ```bash
-git diff --name-only $(git merge-base HEAD main)..HEAD | grep -E "\.(test|spec)\.(ts|tsx)$"
+echo "$CHANGED" | grep -E "\.(test|spec)\.(ts|tsx)$"
 ```
 
 If test files are in scope:
@@ -88,7 +106,7 @@ Running cleanup-unit-tests...
 Call `/cleanup-unit-tests` for any unit test files.
 
 ```bash
-git diff --name-only $(git merge-base HEAD main)..HEAD | grep -E "\.cy\.(ts|tsx)$"
+echo "$CHANGED" | grep -E "\.cy\.(ts|tsx)$"
 ```
 
 If Cypress test files are in scope:
@@ -98,12 +116,39 @@ Running cleanup-e2e-tests...
 ```
 Call `/cleanup-e2e-tests` for any E2E test files.
 
-## Step 7: Final Verification
+## Step 6: Final Verification
 
 ```bash
 pnpm type-check 2>&1 | tail -5
 pnpm lint 2>&1 | tail -5
 ```
+
+## Step 7: Update Repo Learnings
+
+After cleanup, capture anything non-obvious that was encountered. Read the existing learnings:
+
+```bash
+REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
+```
+
+**`gotchas.md` — add if:**
+- A type error required a non-obvious fix that will likely recur (e.g., a generic type that must be explicitly parameterized, a discriminated union that can't be narrowed automatically)
+- A lint rule forced a specific code shape that isn't obvious from the rule name alone
+- You removed dead code that revealed a misuse pattern worth flagging
+
+**`standards.md` — add if:**
+- A tooling rule caused a non-trivial rewrite (add: what the rule is, what it rejected, what it accepts)
+- A Prettier/ESLint combination caused a conflict that required a specific resolution
+
+Only add entries that would save future work. Do not add entries for issues that are already documented or are self-evident from the rule name.
+
+If nothing new to add:
+```
+✓ No learnings updates — cleanup followed known patterns.
+```
+
+Otherwise append to the relevant files and update `index.md` `Last analyzed` date to today.
 
 ## Step 8: Report
 
@@ -113,8 +158,8 @@ pnpm lint 2>&1 | tail -5
 Lint: ✓ / ⚠ {remaining issues}
 Type-check: ✓ / ⚠ {remaining issues}
 Dead code removed: {list of removals}
-Comments cleaned: {count}
 Test cleanup: ✓ unit / ✓ e2e / skipped
+Learnings updated: {list of files updated, or "none"}
 
 Files modified: {list}
 ```

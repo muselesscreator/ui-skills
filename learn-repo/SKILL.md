@@ -24,9 +24,18 @@ Analyze the current repo's code — components, patterns, conventions, test stru
 ## Step 1: Identify Repo and Scope
 
 ```bash
-# Repo name
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//' || node -e "console.log(require('./package.json').name.replace('@','').replace('/','--'))")
+# Repo name — use git root dirname, no remote lookup needed
+REPO=$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))
 echo "Repo: $REPO"
+
+# Short-circuit if learnings already exist
+LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
+if [ -d "$LEARNINGS_DIR" ] && [ -f "$LEARNINGS_DIR/index.md" ]; then
+  echo "Existing learnings found at $LEARNINGS_DIR"
+  echo "Use /update-learnings to refresh, or continue to do a full re-analysis."
+  # Stop here unless the user explicitly asked for a full re-analysis
+  exit 0
+fi
 ```
 
 If a path argument was given: analysis is scoped to that path. Learnings are written to `~/.claude/repo-learnings/$REPO/scoped/{slug}.md` and `index.md` is updated with a pointer.
@@ -73,6 +82,36 @@ Analyze frontend code to capture:
 - Hook naming
 - File naming
 - Test file naming
+
+## Step 3.5: Tooling Config Analysis
+
+Read and extract enforcement config. This feeds into `standards.md` so `plan-ui` can load it without re-reading config files each time.
+
+**TypeScript:**
+```bash
+find . -name "tsconfig*.json" -not -path "*/node_modules/*" | head -10
+```
+Read root and any app-level tsconfigs. Record:
+- Which strict flags are active (list explicitly — do not just say "strict: true", enumerate what that enables)
+- Any path aliases configured (`paths`) — these affect import style
+- `lib` and `target` settings if they constrain API usage
+
+**ESLint:**
+```bash
+find . -maxdepth 3 \( -name ".eslintrc*" -o -name "eslint.config.*" \) | grep -v node_modules | head -5
+```
+Read the config. Record:
+- Import ordering rules (plugin, rule name, exact group order)
+- Rules banning common shortcuts: `no-explicit-any`, `no-non-null-assertion`, `no-restricted-imports`, etc.
+- JSX/React-specific rules
+- Any rules set to `error` that are commonly triggered during feature work
+- `eslint-disable` comments in source — these mark rules the team finds hard to satisfy and are worth noting
+
+**Prettier:**
+```bash
+find . -maxdepth 3 \( -name ".prettierrc*" -o -name "prettier.config.*" \) | grep -v node_modules | head -3
+```
+Record non-default settings. If no config found, note "Prettier defaults assumed."
 
 ## Step 4: Test Pattern Analysis
 
@@ -121,7 +160,7 @@ Scope: {full | path/to/scope}
 **file-structure.md:** Directory conventions, key paths, reference files
 **gotchas.md:** Anti-patterns, deprecations, known traps
 **test-patterns.md:** All test conventions (used by _test-context)
-**standards.md:** Inferred standards — what the codebase consistently does
+**standards.md:** Inferred standards — what the codebase consistently does, plus tooling enforcement: active TS strict flags, key ESLint rules (especially error-level ones), Prettier non-defaults
 
 ## Step 8: Confirm
 
