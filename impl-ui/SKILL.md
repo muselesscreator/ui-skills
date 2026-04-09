@@ -25,7 +25,27 @@ confidence_threshold: 75
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
 ```
 
-Load `~/.claude/repo-learnings/$REPO/ui-patterns.md`, `file-structure.md`, `gotchas.md`, `standards.md`.
+Load learnings from the Obsidian vault:
+
+```
+# Always load index (reference implementations)
+mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo-name}"
+
+# Always load gotchas
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo-name}/gotchas"
+→ Read all returned notes
+
+# Always load file placement
+mcp__obsidian__read-note: vault="obsidian-vault", filename="file-structure.md", folder="repo-learnings/{repo-name}"
+```
+
+If a plan file is being used, extract the "Patterns to Follow" section and search for each pattern specifically:
+```
+mcp__obsidian__search-vault: vault="obsidian-vault", query="{pattern keyword}", path="repo-learnings/{repo-name}"
+→ Read the specific notes returned
+```
+
+**Fallback:** If vault search returns 0 results, read flat files from `~/.claude/repo-learnings/$REPO/`.
 
 If $ARGUMENTS contains "use plan": find the most recent plan file with `ls -t ~/.claude/skill-output/$REPO/$BRANCH/plan-*.md 2>/dev/null | head -1` and read it as the implementation spec.
 If $ARGUMENTS contains a file path: read that file as the implementation spec.
@@ -104,39 +124,37 @@ Write this report to `~/.claude/skill-output/$REPO/$BRANCH/impl-report-$TS.md` s
 
 ## Step 5: Update Repo Learnings
 
-After implementation, capture anything new or surprising discovered during the work. Read the existing learnings files that may need updating:
+After implementation, capture anything new or surprising. Write back to the Obsidian vault using the edit-note pattern: read the note first, merge new content, then write the updated note.
 
-```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
-```
-
-For each category, consider whether to add entries:
-
-**`gotchas.md` — add if:**
-- You hit a trap that wasn't already documented (e.g., a hook that must be called in a specific order, a component prop that behaves unexpectedly, an import that causes a circular dependency)
+**`gotchas/` — add to the relevant note if:**
+- You hit a trap that wasn't already documented
 - You found a `// HACK`, `// NOTE`, or `// FIXME` comment while reading code that isn't captured yet
 - A deviation from pattern was necessary and the reason is non-obvious
 
-**`ui-patterns.md` — add if:**
-- You established a new pattern that didn't exist before (new data hook shape, new component composition style)
+**`ui-patterns/` — add to the relevant note if:**
+- You established a new pattern that didn't exist before
 - You discovered an existing pattern that wasn't documented
 
-**`standards.md` — add if:**
-- A tooling constraint caused a non-obvious fix (e.g., `exactOptionalPropertyTypes` required a specific workaround, an ESLint rule forced a non-obvious import style)
+**`standards/` — add to the relevant note if:**
+- A tooling constraint caused a non-obvious fix
 
-**`file-structure.md` — add if:**
+**`file-structure.md` — update if:**
 - You created files in a location that wasn't previously described
-- The placement decision was non-obvious
 
-Only write entries that would save future work. Do not add entries that are already present or that merely restate the obvious.
-
-If there is nothing new to add, skip the file write and note:
+Write pattern:
 ```
-✓ No learnings updates — implementation followed established patterns.
+# 1. Read current note content
+mcp__obsidian__read-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}"
+
+# 2. Merge new findings into content, update last-updated date in frontmatter
+
+# 3. Write back
+mcp__obsidian__edit-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}", content="{full updated content}"
 ```
 
-Otherwise, append new entries to the relevant files. Format new gotcha entries as:
+**Fallback:** If vault not available, append to `~/.claude/repo-learnings/$REPO/{filename}.md` directly.
+
+Format new gotcha entries as:
 ```markdown
 ### {short title}
 {1-2 sentence description of the trap or pattern}
@@ -144,4 +162,7 @@ Otherwise, append new entries to the relevant files. Format new gotcha entries a
 **Fix/approach:** {what to do instead}
 ```
 
-Update `index.md` `Last analyzed` date to today if any files were updated.
+If there is nothing new to add:
+```
+✓ No learnings updates — implementation followed established patterns.
+```

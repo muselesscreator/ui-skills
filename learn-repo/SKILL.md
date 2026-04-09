@@ -134,33 +134,64 @@ Identify 1-3 files or features that represent the cleanest, most idiomatic examp
 
 ## Step 7: Write Learnings
 
-Create or overwrite `~/.claude/repo-learnings/$REPO/`:
+Write to the Obsidian vault at `/Users/bwarzeski/.claude/obsidian-vault/repo-learnings/$REPO/` using `create-note` MCP calls. All notes must include frontmatter with `repo`, `category`, `tags`, and `last-updated` fields.
 
-**index.md:**
-```markdown
-# {repo-name} Learnings
-Last analyzed: {ISO date}
-Scope: {full | path/to/scope}
+**Vault path:** `/Users/bwarzeski/.claude/obsidian-vault/repo-learnings/$REPO/`
 
-## Summary
-[2-3 sentence description of what kind of codebase this is]
-
-## Reference Implementations
-[1-3 files/features that best exemplify the patterns]
-
-## Learnings Files
-- ui-patterns.md — component and data layer patterns
-- file-structure.md — where things live
-- gotchas.md — anti-patterns and traps
-- test-patterns.md — test conventions
-- standards.md — inferred project standards
+**Frontmatter schema for every note:**
+```yaml
+---
+repo: {repo-name}
+category: {ui-patterns | gotchas | test-patterns | standards | file-structure | index}
+tags:
+  - repo/{repo-name}
+  - category/{category}
+  - topic/{specific-topic}   # one or more topic tags (see below)
+last-updated: {ISO-date}
+---
 ```
 
-**ui-patterns.md:** Component patterns, data flow, state management, naming
-**file-structure.md:** Directory conventions, key paths, reference files
-**gotchas.md:** Anti-patterns, deprecations, known traps
-**test-patterns.md:** All test conventions (used by _test-context)
-**standards.md:** Inferred standards — what the codebase consistently does, plus tooling enforcement: active TS strict flags, key ESLint rules (especially error-level ones), Prettier non-defaults
+**Topic tags to use:**
+- `topic/components` — component structure, props, presentational/container split
+- `topic/data-fetching` — API hooks, query patterns
+- `topic/state-management` — Zustand, XState, local state
+- `topic/forms` — form patterns
+- `topic/testing` — any test content
+- `topic/e2e` — Cypress-specific
+- `topic/unit-tests` — Vitest-specific
+- `topic/file-placement` — where things go, naming
+- `topic/typescript` — TS config, strict flags
+- `topic/eslint` — lint rules
+- `topic/gotcha` — traps and anti-patterns
+- `topic/design-system` — component library wrappers
+
+**Note structure (split from the old flat files):**
+
+Create notes in these subdirectories:
+- `ui-patterns/component-structure.md` — presentational/container split, props conventions. Tags: `topic/components`
+- `ui-patterns/design-system.md` — component library wrapper rules. Tags: `topic/design-system`, `topic/components`
+- `ui-patterns/data-fetching.md` — API hooks, query patterns. Tags: `topic/data-fetching`
+- `ui-patterns/state-management.md` — state libraries and rules. Tags: `topic/state-management`
+- `ui-patterns/hook-composition.md` — custom hook patterns. Tags: `topic/components`, `topic/state-management`
+- `file-structure.md` — directory conventions, naming. Tags: `topic/file-placement`
+- `gotchas/component-antipatterns.md` — Tags: `topic/gotcha`, `topic/components`, `topic/design-system`
+- `gotchas/state-antipatterns.md` — Tags: `topic/gotcha`, `topic/state-management`
+- `gotchas/form-traps.md` — Tags: `topic/gotcha`, `topic/forms`
+- `gotchas/test-traps.md` — Tags: `topic/gotcha`, `topic/testing`
+- `test-patterns/e2e-patterns.md` — Tags: `topic/testing`, `topic/e2e`
+- `test-patterns/unit-patterns.md` — Tags: `topic/testing`, `topic/unit-tests`
+- `standards/typescript.md` — Tags: `topic/typescript`
+- `standards/eslint.md` — Tags: `topic/eslint`
+- `standards/prettier.md` — Tags: `topic/eslint`
+
+Create notes using MCP:
+```
+mcp__obsidian__create-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}", content="{frontmatter + content}"
+```
+
+Create `index.md` last (it references all other notes). It should list all notes created under "Learnings Notes" and include the summary and reference implementations.
+
+**Also write flat files as fallback** to `~/.claude/repo-learnings/$REPO/` using the original format, so skills that haven't been updated yet continue to work.
 
 ## Step 8: Confirm
 

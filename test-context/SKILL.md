@@ -25,9 +25,26 @@ git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//'
 
 ## Step 2: Load Stored Learnings
 
-Read `~/.claude/repo-learnings/{repo-name}/test-patterns.md` if it exists.
+Load test pattern learnings from the Obsidian vault using MCP search:
 
-If it does not exist, output a warning:
+```
+# Search for test pattern notes
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/testing", path="repo-learnings/{repo-name}"
+```
+
+Read any notes returned (e2e-patterns.md, unit-patterns.md). Then search for test-related gotchas:
+
+```
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo-name}/gotchas"
+```
+
+If `test-traps.md` is in the results, read it.
+
+**Fallback:** If the vault search returns 0 results (vault not configured or repo not yet in vault):
+```
+Read ~/.claude/repo-learnings/{repo-name}/test-patterns.md
+```
+If that also does not exist, output a warning:
 ```
 ⚠ No test learnings found for this repo. Run /learn-repo first for better results.
 Proceeding with live scan only.

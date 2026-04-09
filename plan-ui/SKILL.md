@@ -29,34 +29,60 @@ confidence_threshold: 75
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
 ```
 
-Read `~/.claude/repo-learnings/$REPO/index.md`.
+Load learnings from the Obsidian vault using targeted MCP search:
 
-**If it doesn't exist:**
+**1. Always read index first** (small, contains reference implementations):
+```
+mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo-name}"
+```
+
+If index.md is not found, fall back to flat file: `~/.claude/repo-learnings/$REPO/index.md`. If neither exists:
 ```
 ⚠ No learnings found for {repo-name}. Run /learn-repo first for best results.
 Proceeding with live analysis only — this will be slower.
 ```
 
-**If learnings exist — check freshness:**
-
-Extract the `Last analyzed` date from `index.md`. Then check if significant code has changed since that date:
-
+**2. Check freshness** from `last-updated` frontmatter. If more than 20 source files changed since that date:
 ```bash
-git log --since="{last-analyzed-date}" --name-only --pretty=format: | sort -u | grep -v '^$' | grep -E "\.(ts|tsx|js|jsx)$" | wc -l
+git log --since="{last-updated}" --name-only --pretty=format: | sort -u | grep -v '^$' | grep -E "\.(ts|tsx|js|jsx)$" | wc -l
+```
+If stale: call `/update-learnings`, then re-read.
+
+**3. Load task-scoped patterns** based on $ARGUMENTS keywords:
+
+Always load:
+```
+# Gotchas — always load all (they're small)
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo-name}/gotchas"
+→ Read all returned notes
+
+# File placement — always needed
+mcp__obsidian__read-note: vault="obsidian-vault", filename="file-structure.md", folder="repo-learnings/{repo-name}"
+
+# Standards — always needed for tooling constraints
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:category/standards", path="repo-learnings/{repo-name}/standards"
+→ Read all returned notes (typescript.md, eslint.md, prettier.md)
 ```
 
-If more than 20 source files have changed since last analysis:
+Load based on task keywords in $ARGUMENTS:
 ```
-⚠ Learnings may be stale — {N} source files changed since {last-analyzed-date}.
-Running /update-learnings to refresh before planning...
-```
-Call `/update-learnings` now. Wait for it to complete, then re-read the updated learnings files.
+# If task involves components, forms, or design system:
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/components", path="repo-learnings/{repo-name}/ui-patterns"
 
-Whether fresh or just refreshed, read:
-- `ui-patterns.md`
-- `file-structure.md`
-- `gotchas.md`
-- `standards.md`
+# If task involves data fetching or API hooks:
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/data-fetching", path="repo-learnings/{repo-name}/ui-patterns"
+
+# If task involves state (Zustand, XState, store):
+mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/state-management", path="repo-learnings/{repo-name}/ui-patterns"
+```
+
+Also do one content search against the task description to surface cross-cutting notes:
+```
+mcp__obsidian__search-vault: vault="obsidian-vault", query="{first meaningful noun from $ARGUMENTS}", path="repo-learnings/{repo-name}"
+→ Read any notes returned that weren't already loaded
+```
+
+**Fallback:** If any vault search returns 0 results, read the corresponding flat file directly from `~/.claude/repo-learnings/$REPO/`.
 
 ## Step 2: Check Local Code State
 
