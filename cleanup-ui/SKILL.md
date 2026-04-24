@@ -90,31 +90,47 @@ For each changed file in scope:
 
 Remove dead code. **NEVER prefix unused variables with `_` to suppress warnings — delete them entirely.** Underscore prefixes leave dead code in place and mislead future readers into thinking the variable is intentionally unused-but-kept.
 
-## Step 5: Check for Test Files in Scope
+## Step 5: Check for Affected Test Files
 
 Use the same `$CHANGED` list from Step 1 (do not re-run git diff).
 
+**Unit tests — direct:**
 ```bash
 echo "$CHANGED" | grep -E "\.(test|spec)\.(ts|tsx)$"
 ```
+If unit test files are in scope, call `/cleanup-unit-tests` for them.
 
-If test files are in scope:
-```
-Test files detected in scope.
-Running cleanup-unit-tests...
-```
-Call `/cleanup-unit-tests` for any unit test files.
-
+**E2E tests — direct:**
 ```bash
 echo "$CHANGED" | grep -E "\.cy\.(ts|tsx)$"
 ```
+If Cypress spec files are in scope, call `/cleanup-e2e-tests` for them.
 
-If Cypress test files are in scope:
+**E2E tests — indirect (changed source may break existing specs):**
+Even if no `.cy.ts` files are in the diff, check whether the changed source files are exercised by existing E2E specs:
+
+```bash
+# For each changed source file, extract its component/feature name and search E2E specs
+for f in $(echo "$CHANGED" | grep -E "\.(ts|tsx)$" | grep -v test | grep -v spec); do
+  name=$(basename "$f" | sed 's/\.[^.]*$//')
+  grep -rl "$name" packages/e2e/tests/specs/ 2>/dev/null
+done | sort -u
 ```
-E2E test files detected in scope.
-Running cleanup-e2e-tests...
+
+If any E2E specs reference the changed components or feature paths:
 ```
-Call `/cleanup-e2e-tests` for any E2E test files.
+⚠ Existing E2E specs may be affected by source changes:
+  - {spec file}: references {component/feature}
+```
+
+Read those specs and their page objects. Determine if the source changes break any existing flow:
+- Selector changes (`data-key` attributes added, removed, or renamed)
+- New required interactions (a step was added to a flow)
+- Changed page structure (a component was moved or conditionally rendered)
+- API intercept changes (new tRPC calls, changed route shapes)
+
+If specs are broken: call `/cleanup-e2e-tests` scoped to those files.
+If specs are intact but the check revealed a gap in coverage, note it in the report but do not fix it here — that's work for `/write-e2e-tests`.
 
 ## Step 6: Final Verification
 

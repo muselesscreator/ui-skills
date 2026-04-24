@@ -146,25 +146,43 @@ Based on the task, find and read:
 
 ## Step 6: Read Existing Tests for Affected Files
 
-For each file identified in Step 5 as being modified, find and read its existing test file(s):
+**Unit tests:** For each file identified in Step 5 as being modified, find and read its co-located test file(s):
 
 ```bash
 # Find test files co-located with or adjacent to affected source files
 # e.g. Component.tsx → Component.test.tsx, Component.spec.tsx, __tests__/Component.tsx
 ```
 
-For each test file found:
+For each unit test file found:
 - Note what is currently tested (happy path, edge cases, mocked dependencies)
 - Identify tests that will break due to the planned changes (changed props, renamed exports, new required deps)
 - Identify tests that will need to be extended to cover new behavior
 - Note any mocks or fixtures that reference things being changed
 
-If no test files exist for a modified file, flag it:
+If no unit test files exist for a modified file, flag it:
 ```
-⚠ No tests found for {file} — new tests will need to be written from scratch.
+⚠ No unit tests found for {file} — new tests will need to be written from scratch.
 ```
 
-Carry these findings into the Test Impact section of the plan.
+**E2E tests:** Scan existing E2E specs for flows that exercise the affected feature area — even if those spec files are not being modified:
+
+```bash
+# Find specs that reference the feature area, affected component names, or route paths
+grep -rl "{feature-name}\|{ComponentName}\|{route-path}" packages/e2e/tests/specs/ 2>/dev/null
+```
+
+For each E2E spec found that hits the affected area:
+- Read the spec and its associated page object
+- Identify which flows would exercise the changed component or behavior
+- Determine if the change would break any existing flow (selector changes, new required interactions, changed page structure)
+- Note any intercepts or data factories that reference the changed API surface
+
+If no E2E specs cover the affected area:
+```
+⚠ No E2E coverage found for this feature area — consider whether a new spec is needed.
+```
+
+Carry all findings into the Test Plan section of the plan.
 
 ## Step 7: Produce Implementation Plan
 
