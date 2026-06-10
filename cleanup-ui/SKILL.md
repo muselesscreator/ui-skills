@@ -59,6 +59,17 @@ pnpm lint:fix 2>&1 | tee /tmp/lint-output.txt
 
 Read output. List what was auto-fixed and what requires manual attention.
 
+**Also run Prettier** — ESLint and Prettier are separate checks in CI (`lint` vs `lint:prettier`). ESLint's `lint:fix` does NOT run Prettier. Always run Prettier write after ESLint fix:
+
+```bash
+# Scoped to affected packages (same --filter flags as lint:fix above)
+pnpm --filter <affected-packages> lint:prettier:fix 2>&1 | tee /tmp/prettier-output.txt
+# Or full-repo fallback:
+pnpm prettier . --write 2>&1 | tail -5
+```
+
+If a package has no `lint:prettier:fix` script, run `pnpm prettier <files> --write` directly on the changed files.
+
 ## Step 3: Type-Check
 
 ```bash
@@ -100,6 +111,21 @@ echo "$CHANGED" | grep -E "\.(test|spec)\.(ts|tsx)$"
 ```
 If unit test files are in scope, call `/cleanup-unit-tests` for them.
 
+**Unit tests — indirect (changed source may break existing tests):**
+For each changed source file (non-test), check whether a sibling test file exists:
+```bash
+for f in $(echo "$CHANGED" | grep -E "\.(ts|tsx)$" | grep -vE "\.(test|spec)\.(ts|tsx)$"); do
+  dir=$(dirname "$f")
+  base=$(basename "$f" | sed 's/\.[^.]*$//')
+  ext="${f##*.}"
+  # Check sibling test file
+  for candidate in "$dir/$base.test.$ext" "$dir/$base.spec.$ext" "$dir/__tests__/$base.test.$ext" "$dir/__tests__/$base.spec.$ext"; do
+    [ -f "$candidate" ] && echo "$candidate"
+  done
+done | sort -u
+```
+If any indirect test files are found that were NOT already in the direct list, add them to the unit test cleanup scope and run them. A source file reorder/rename that breaks its test should be caught here before CI does.
+
 **E2E tests — direct:**
 ```bash
 echo "$CHANGED" | grep -E "\.cy\.(ts|tsx)$"
@@ -137,7 +163,11 @@ If specs are intact but the check revealed a gap in coverage, note it in the rep
 ```bash
 pnpm type-check 2>&1 | tail -5
 pnpm lint 2>&1 | tail -5
+# Prettier is a separate CI check — must verify it explicitly
+pnpm --filter <affected-packages> lint:prettier 2>&1 | tail -5
 ```
+
+All three must be clean before the cleanup is considered done. Prettier failures in CI are a separate check from ESLint (`lint:prettier` Turbo task) and will not be caught by `pnpm lint` alone.
 
 ## Step 7: Update Repo Learnings
 

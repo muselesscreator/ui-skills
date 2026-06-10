@@ -248,3 +248,29 @@ mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
 ```
 
 Write the full implementation plan produced in Step 4 to `~/.claude/skill-output/$REPO/$BRANCH/plan-$TS.md`. This file is read by `/impl-ui` when invoked with `use plan` — it picks up the most recent `plan-*.md` in the branch directory.
+
+## Step 9: Final User-Facing Summary
+
+After writing the plan file, print a summary to the conversation. The user should not have to open the plan file to know what decisions are pending.
+
+**Rules:**
+- **Always list every Open Question inline, in full** — verbatim from the plan, numbered, with any context/options needed to answer. Never write "see the plan for questions" or "open the plan to review questions."
+- If the entire plan is short (under ~80 lines), print the whole plan inline instead of a summary. Still call out the Open Questions section explicitly at the end so it isn't missed.
+- Otherwise, print a compact summary using this shape:
+
+```
+Plan written to: {relative path to plan file}
+
+**Approach:** {one sentence}
+
+**Scope:** {N files to create, M files to modify}
+
+**Open Questions** ({count}):
+1. {full question text, including any options or trade-offs}
+2. {full question text, including any options or trade-offs}
+...
+
+(or "**Open Questions:** none — ready to implement" if there are zero)
+```
+
+If there are open questions, end the message by asking the user to answer them before `/impl-ui` runs. Do not proceed to implementation while questions are unanswered.
