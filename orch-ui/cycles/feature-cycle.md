@@ -1,45 +1,58 @@
 ---
 name: feature-cycle
-description: Plan → implement → validate → cleanup → commit → capture learnings, for a UI feature or ticket. Each step runs in its own isolated subagent.
+description: Analyze → plan → implement → validate → cleanup → commit → capture learnings, for a UI feature or ticket. Each step runs in its own isolated subagent.
 steps:
+  - id: analyze
+    skill: analyze-task
+    args: "$TASK"
+    model: sonnet
+    stop_on_fail: true
+    note: Gathers fixed facts (learnings, in-flight branch state, tooling constraints, task classification, named files) into analysis-*.md. $TASK = the feature/ticket description. sonnet — reading + distillation, not deep reasoning. Default agent type (needs Write for its artifact).
   - id: plan
     skill: plan-ui
     args: "$TASK"
+    model: opus
+    agent_type: Plan
     stop_on_fail: true
-    note: Produces plan-*.md. $TASK = the feature/ticket description.
+    note: Reads analysis-latest.md, discovers affected files, produces plan-*.md. opus — reasoning-heavy. Plan agent type — read-only architect, skips CLAUDE.md + leaner toolset; plan-ui persists its artifact via a Bash heredoc since Plan has no Write tool.
   - id: impl
     skill: impl-ui
     args: "use plan"
+    model: sonnet
     stop_on_fail: true
-    note: Picks up the latest plan and implements it.
+    note: Picks up the latest plan and implements it. sonnet — standard build.
   - id: validate
     skill: validate-ui
     args: "$TASK"
+    model: opus
     stop_on_fail: true
-    note: Behavioral gate — confirms the build matches the request before cleanup/commit.
+    note: Behavioral gate — confirms the build matches the request before cleanup/commit. opus — a wrong pass here is expensive.
   - id: cleanup
     skill: cleanup-ui
     args: ""
+    model: haiku
     stop_on_fail: true
-    note: Lint, type-check, dead-code, and test fixes on the branch diff.
+    note: Lint, type-check, dead-code, and test fixes on the branch diff. haiku — mechanical.
   - id: commit
     skill: commit-branch
     args: ""
+    model: haiku
     stop_on_fail: true
-    note: Stage + commit (no push). Message generated from the diff.
+    note: Stage + commit (no push). Message generated from the diff. haiku — mechanical.
   - id: braindump
     skill: wiki-braindump
     args: ""
     scope: repo
     interactive: true
     stop_on_fail: false
-    note: Repo-local + interactive. Free-form capture for the wiki; runs in the main session. Auto-skipped if the repo has no wiki-braindump skill.
+    note: Repo-local + interactive. Free-form capture for the wiki; runs in the main session. Auto-skipped if the repo has no wiki-braindump skill. (No model — runs in the main session.)
   - id: ingest
     skill: wiki-ingest
     args: ""
     scope: repo
+    model: sonnet
     stop_on_fail: false
-    note: Repo-local. SHA-syncs the repo ./wiki/ against the branch's changed sources. Auto-skipped if the repo has no wiki-ingest skill.
+    note: Repo-local. SHA-syncs the repo ./wiki/ against the branch's changed sources. Auto-skipped if the repo has no wiki-ingest skill. sonnet — structured but light.
 ---
 
 # feature-cycle
@@ -50,6 +63,16 @@ Run with: `/orch-ui feature-cycle <feature or ticket description>` — or just
 The full implementation loop for a UI feature. Each step is isolated in its own
 subagent; results pass between steps through `~/.claude/skill-output/$REPO/$BRANCH/`,
 which the skills read and write themselves.
+
+`analyze` and `plan` are deliberately split. `analyze` gathers the **fixed facts**
+around the task — learnings, in-flight branch state, tooling constraints, task
+classification, and the files the task explicitly names — and distills them into
+`analysis-*.md`. `plan` then reasons over that artifact: it discovers which files
+the change *actually* touches (a planning judgment, not metadata) and produces the
+plan. The seam is **mentioned vs. affected** files. The payoff: `analyze` runs on
+sonnet while `plan` gets opus, the plan reasons over a clean digest rather than a
+context full of raw file dumps, and the `analysis-*.md` artifact is reusable by
+later steps instead of being re-derived each time.
 
 `validate` is the behavioral gate: if the implementation doesn't match `$TASK`,
 the run halts before cleanup/commit so you can decide what to do next.

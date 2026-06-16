@@ -34,7 +34,7 @@ Do this **before touching anything**. Never run a step until the user has confir
 
    > Cycle: **feature-cycle** — _<its description>_
    > Task: _<$TASK, or "(none given)">_
-   > Steps: plan → impl → validate → cleanup → commit → braindump → ingest
+   > Steps: analyze → plan → impl → validate → cleanup → commit → braindump → ingest
    > Proceed? Or pick another cycle / edit the task.
 
    Use AskUserQuestion if it makes the choice cleaner (options = the available cycle-types). If `$TASK` is empty but the chosen cycle needs one (e.g. `plan` takes `$TASK`), ask for it now.
@@ -60,6 +60,8 @@ Read `~/.claude/skills/orch-ui/cycles/<cycle>.md`. Parse the `steps:` list from 
 - `args` — argument string (may contain `$TASK`)
 - `scope` — `global` (default; `~/.claude/skills/`, Skill tool) or `repo` (the **triggering shell's current repo** owns it — resolve from there)
 - `interactive` — `true` if it needs live back-and-forth (runs in the main session, never isolated)
+- `model` — the model tier for this step's subagent: `haiku` (mechanical), `sonnet` (standard), or `opus` (deep reasoning). If absent, omit the override and let the subagent inherit the session model. Ignored for `interactive` steps (those run in the main session).
+- `agent_type` — the subagent type to spawn (default `general-purpose`). A read-only planning/analysis step can set `Plan` or `Explore`: those skip CLAUDE.md inheritance and run on a leaner tool set, shaving the per-subagent startup floor. **Constraint:** `Plan`/`Explore` have no Write/Edit tool, so a step using them must run a skill that either returns its result inline (in `FOLLOWUP`, with `ARTIFACT: -`) or persists its artifact via a Bash heredoc — never the Write tool. Ignored for `interactive` steps.
 - `stop_on_fail` — `true` (default) or `false`
 - `stub` — `true` if not yet implemented (skip it)
 - `note` — optional human note
@@ -89,7 +91,7 @@ If `stub: true` → log `⏭ <id>: skipped (stub)` to `$RUNLOG` and the user, th
 These need the human, so they **cannot be isolated**. Do NOT spawn a subagent. In the main session: announce the step, then read and follow the resolved skill (`$SKILLFILE` for `scope: repo`, or the Skill tool for `scope: global`) directly, conversing with the user. When it concludes, record a one-line result and continue. This is the one deliberate exception to isolation.
 
 ### d. Normal steps → one isolated subagent
-Substitute `$TASK` into `args`, then spawn ONE subagent with the **Task** tool (`subagent_type: general-purpose`). Give it exactly this prompt:
+Substitute `$TASK` into `args`, then spawn ONE subagent with the **Task** tool using `subagent_type` = the step's `agent_type` (default `general-purpose`). If the step has a `model`, pass it as the Task tool's `model` (`haiku`/`sonnet`/`opus`); if absent, omit `model` so the subagent inherits the session model. Give it exactly this prompt:
 
 > You are running one isolated step of the `<cycle>` cycle — repo `<REPO>`, branch `<BRANCH>`.
 > — If `scope: global`: **Invoke the `<skill>` skill** (Skill tool) with arguments: `<resolved args>`. If you cannot invoke it as a skill, read and follow `~/.claude/skills/<skill>/SKILL.md`.

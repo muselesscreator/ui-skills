@@ -164,23 +164,23 @@ Report: SEVERITY | file:line | issue | fix. Severity ∈ {BLOCKING, SHOULD-FIX, 
 Skip non-UI concerns. Do not flag anything the conventions explicitly allow. No generic nits.
 ```
 
-**Agents** (spawn only those whose category exists in the file mix):
+**Agents** (spawn only those whose category exists in the file mix). Spawn each with the **Task** tool, passing the `model` tier shown in parentheses — correctness-critical lenses get `opus`, standard lenses `sonnet`, mechanical lenses `haiku`. With up to 8 agents in one parallel batch, demoting the cheap lenses is most of the savings.
 
-1. **design-system** — ui-component, ui-style. Component library usage (valid props, sizes, variants, slots), layout patterns (flex/gap vs margin), spacing scale adherence, theme token usage vs raw values, anti-pattern: building custom when a primitive exists.
+1. **design-system** (sonnet) — ui-component, ui-style. Component library usage (valid props, sizes, variants, slots), layout patterns (flex/gap vs margin), spacing scale adherence, theme token usage vs raw values, anti-pattern: building custom when a primitive exists.
 
-2. **a11y** — ui-component. Semantic HTML, ARIA roles/attrs correctness (and unnecessary ARIA), focus management (visible focus, trap/restore in modals), keyboard nav (tab order, Enter/Space/Escape handlers), screen-reader text (alt, labels, aria-label/labelledby), color-contrast assumptions, motion/reduced-motion.
+2. **a11y** (opus) — ui-component. Semantic HTML, ARIA roles/attrs correctness (and unnecessary ARIA), focus management (visible focus, trap/restore in modals), keyboard nav (tab order, Enter/Space/Escape handlers), screen-reader text (alt, labels, aria-label/labelledby), color-contrast assumptions, motion/reduced-motion.
 
-3. **ui-state** — ui-component, ui-hook. Loading/error/empty states present and correct, data fetching uses repo's hook pattern, cache invalidation/refetch correctness, race conditions, state collocated at right level (no prop drilling vs no over-globalizing), form validation flow.
+3. **ui-state** (sonnet) — ui-component, ui-hook. Loading/error/empty states present and correct, data fetching uses repo's hook pattern, cache invalidation/refetch correctness, race conditions, state collocated at right level (no prop drilling vs no over-globalizing), form validation flow.
 
-4. **ui-perf** — ui-component, ui-hook. Unnecessary re-renders (stable refs, memo only where measured), large list virtualization, image sizing/loading, bundle-size red flags (heavy imports, default-exporting whole libs), Suspense/skeleton usage.
+4. **ui-perf** (sonnet) — ui-component, ui-hook. Unnecessary re-renders (stable refs, memo only where measured), large list virtualization, image sizing/loading, bundle-size red flags (heavy imports, default-exporting whole libs), Suspense/skeleton usage.
 
-5. **ui-security** — ui-component, ui-hook. XSS via `dangerouslySetInnerHTML`/`v-html`/`{@html}`, unsanitized user content rendered as markup, `href={userInput}`, target="_blank" without rel="noopener", token/PII in client-side state or localStorage, CSP-violating inline handlers.
+5. **ui-security** (opus) — ui-component, ui-hook. XSS via `dangerouslySetInnerHTML`/`v-html`/`{@html}`, unsanitized user content rendered as markup, `href={userInput}`, target="_blank" without rel="noopener", token/PII in client-side state or localStorage, CSP-violating inline handlers.
 
-6. **ui-testing** — ui-test, plus ui-component/ui-hook (to check coverage gaps). New UI behavior has a test, tests assert user-visible behavior (role/text queries), no implementation-detail tests, accessible queries used, E2E selectors stable and match repo convention.
+6. **ui-testing** (sonnet) — ui-test, plus ui-component/ui-hook (to check coverage gaps). New UI behavior has a test, tests assert user-visible behavior (role/text queries), no implementation-detail tests, accessible queries used, E2E selectors stable and match repo convention.
 
-7. **ui-docs** — ui-story, .md files describing UI. Stories cover new variants/states, design-system docs updated when tokens/components change.
+7. **ui-docs** (haiku) — ui-story, .md files describing UI. Stories cover new variants/states, design-system docs updated when tokens/components change.
 
-8. **comments** — only if Step 7 found open comments. Status per comment: ADDRESSED / PARTIAL / NOT-ADDRESSED with commit SHA or quoted reply.
+8. **comments** (haiku) — only if Step 7 found open comments. Status per comment: ADDRESSED / PARTIAL / NOT-ADDRESSED with commit SHA or quoted reply.
 
 **Non-UI files**: if `non-ui` category is non-empty, do NOT spawn a generalist agent. Instead, note in the final report:
 ```

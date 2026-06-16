@@ -23,94 +23,32 @@ confidence_threshold: 75
 
 **Arguments**: $ARGUMENTS — description of the UI task to plan
 
-## Step 1: Load and Refresh Repo Learnings
+This skill owns the **planning judgment**: which files the change actually touches, the approach, the patterns to follow, the test impact, and the open questions. The fixed facts around the task — learnings, in-flight branch state, tooling constraints, task classification, user-named files — are gathered upstream by `/analyze-task` and consumed in Step 1. This skill does not re-derive them; it reasons over them and discovers the rest.
+
+## Step 1: Load the Task-Context Artifact
 
 ```bash
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
+BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
+OUT=~/.claude/skill-output/$REPO/$BRANCH
+ANALYSIS=$(ls -t "$OUT"/analysis-*.md 2>/dev/null | head -1)
 ```
 
-Load learnings. Source depends on the repo:
-```bash
-[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
-```
+**If an analysis artifact exists** (`$ANALYSIS` is non-empty): read it. It supplies — already distilled — the task classification, mentioned files, in-flight conflicts, tooling constraints (TS/ESLint/Prettier), and relevant learnings. Trust it; do not re-query QMD or re-read tooling config. Carry its **Tooling Constraints** and **Gotchas** forward verbatim into the plan, and treat its **In-Flight Conflicts** as already-accounted-for.
 
-**If SRC=wiki (work repo — canonical):** query QMD scoped to `collections: ["wiki"]` with an `intent`. Always pull reference implementations, gotchas/conventions, file placement, and enforced standards (TS/ESLint/Prettier); add a keyword-driven sub-query per the task's focus (components / data-fetching / state). Read top `qmd://wiki/...` hits with `_get`/`_multi_get`. The wiki is maintained via `/wiki-ingest`, so no staleness check is needed.
+**Fallback — no analysis artifact** (standalone `/plan-ui` with no prior `/analyze-task`): invoke `/analyze-task` with `$ARGUMENTS` first, then read the artifact it writes. If that is not possible, do the gathering inline — load learnings (QMD `wiki` collection for work repos, else `~/.claude/repo-learnings/$REPO/`), snapshot the branch diff against `main`, and read TS/ESLint/Prettier config — before continuing. Note in the plan that it ran without a pre-built analysis.
 
-**If SRC=flat (OSS/reference repo):** read `~/.claude/repo-learnings/$REPO/index.md` (reference implementations), `gotchas.md`, `file-structure.md`, `standards.md` always; add `ui-patterns.md`/`advanced-patterns.md` based on task keywords. Check freshness from the `Last analyzed` header — if >20 source files changed since:
-```bash
-git log --since="{last-analyzed}" --name-only --pretty=format: | sort -u | grep -v '^$' | grep -E "\.(ts|tsx|js|jsx)$" | wc -l
-```
-If stale, call `/update-learnings` then re-read.
+## Step 2: Read Relevant Existing Code
 
-If neither source yields anything:
-```
-⚠ No learnings found for {repo-name}. For a work repo run /wiki-index; for an OSS checkout run /learn-repo.
-Proceeding with live analysis only — this will be slower.
-```
-
-## Step 2: Check Local Code State
-
-Before reading tooling config, get a snapshot of what's in flight on the current branch. This prevents the plan from colliding with in-progress work.
-
-```bash
-# What's changed on this branch vs main?
-BRANCH=$(git branch --show-current 2>/dev/null)
-git diff --name-only $(git merge-base HEAD main 2>/dev/null) HEAD 2>/dev/null || git status --short | awk '{print $2}'
-```
-
-For each changed file that is relevant to the task (same feature area, shared components, data hooks), read it now. Note any pending changes that:
-- Affect types or interfaces the task will touch
-- Modify components the task depends on
-- Add or remove patterns that contradict what learnings describe
-
-Flag conflicts as:
-```
-⚠ In-flight change: {file} has pending edits that affect {aspect of the task}.
-This plan accounts for those changes.
-```
-
-## Step 3: Read Tooling Config
-
-Find and read the project's enforcement config so the plan can account for rules that will block implementation.
-
-**TypeScript:**
-```bash
-# Find the relevant tsconfig (prefer app-level over root)
-find . -name "tsconfig*.json" -not -path "*/node_modules/*" | head -10
-```
-Read the tsconfig(s). Note strict flags that affect UI code: `strict`, `strictNullChecks`, `noImplicitAny`, `noUncheckedIndexedAccess`, `noImplicitReturns`, `exactOptionalPropertyTypes`, etc.
-
-**ESLint:**
-```bash
-find . -maxdepth 3 -name ".eslintrc*" -o -name "eslint.config.*" | grep -v node_modules | head -5
-```
-Read the config. Extract rules relevant to UI work: import ordering, no-explicit-any, jsx rules, unused vars, no-restricted-imports, any plugin-specific rules.
-
-**Prettier:**
-```bash
-find . -maxdepth 3 -name ".prettierrc*" -o -name "prettier.config.*" | grep -v node_modules | head -3
-```
-If present, note non-default settings (printWidth, singleQuote, trailingComma, etc.). If absent, note that Prettier defaults apply.
-
-Carry these constraints forward into the plan.
-
-## Step 4: Understand the Task
-
-Parse the task description from $ARGUMENTS. Identify:
-- Is this a new feature, a modification, a refactor, or a bug fix?
-- What parts of the UI are involved? (new view, new component, new form, state change, style update)
-- Are there existing files that need to be read for context?
-
-## Step 5: Read Relevant Existing Code
-
-Based on the task, find and read:
+Now do the discovery the analysis deliberately left open — **which files this change actually touches.** Starting from the mentioned files and reference implementations in the artifact, find and read:
 - The most relevant existing feature for pattern reference (use reference implementations from `index.md` if relevant)
 - The files that will be modified
 - Any parent views or layouts that affect where this fits
 
-## Step 6: Read Existing Tests for Affected Files
+## Step 3: Read Existing Tests for Affected Files
 
-**Unit tests:** For each file identified in Step 5 as being modified, find and read its co-located test file(s):
+**Unit tests:** For each file identified in Step 2 as being modified, find and read its co-located test file(s):
 
 ```bash
 # Find test files co-located with or adjacent to affected source files
@@ -148,7 +86,7 @@ If no E2E specs cover the affected area:
 
 Carry all findings into the Test Plan section of the plan.
 
-## Step 7: Produce Implementation Plan
+## Step 4: Produce Implementation Plan
 
 Output a structured plan:
 
@@ -202,7 +140,7 @@ Output a structured plan:
 
 Keep the plan concrete and short. Reference specific file paths wherever possible. Do not restate the steering docs — reference what the code actually does.
 
-## Step 8: Write Output File
+## Step 5: Write Output File
 
 ```bash
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
@@ -213,7 +151,15 @@ mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
 
 Write the full implementation plan produced in Step 4 to `~/.claude/skill-output/$REPO/$BRANCH/plan-$TS.md`. This file is read by `/impl-ui` when invoked with `use plan` — it picks up the most recent `plan-*.md` in the branch directory.
 
-## Step 9: Final User-Facing Summary
+Use the Write tool when it's available. **If you are running without a Write tool** (e.g. spawned as the read-only `Plan` agent type by `/orch-ui`), persist the same content with a quoted Bash heredoc instead — the quoted delimiter prevents `$`/backtick expansion of the plan body:
+
+```bash
+cat > ~/.claude/skill-output/$REPO/$BRANCH/plan-$TS.md <<'PLAN_EOF'
+<full implementation plan markdown>
+PLAN_EOF
+```
+
+## Step 6: Final User-Facing Summary
 
 After writing the plan file, print a summary to the conversation. The user should not have to open the plan file to know what decisions are pending.
 
