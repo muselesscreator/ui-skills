@@ -87,30 +87,14 @@ If working tree is dirty, ask before checkout. There is no diff-only fallback.
 ## Step 5: Load UI Learnings
 
 ```bash
-REPO=$(basename $(git rev-parse --show-toplevel))
+REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
+[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
 ```
 
-**Always load** (UI review depends on these):
-```
-mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo}"
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo}/gotchas"
-→ Read returned notes
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/components OR tag:topic/ui-system OR tag:topic/design-system", path="repo-learnings/{repo}/ui-patterns"
-→ Read returned notes
-```
+**If SRC=wiki (work repo — canonical):** query QMD scoped to `collections: ["wiki"]` with an `intent`. Always pull UI gotchas/conventions and component/ui-system/design-system patterns; add keyword-driven sub-queries from the Step 3 file-category map (data-fetching/state for ui-hook, theming/css for ui-style, ui-testing for ui-test, storybook for ui-story) plus an a11y/accessibility query. Read top `qmd://wiki/...` hits.
 
-**Conditional UI topics** (based on file-category map from Step 3):
-- ui-hook present → `tag:topic/data-fetching`, `tag:topic/state-management`
-- ui-style present → `tag:topic/theming`, `tag:topic/css`
-- ui-test present → `tag:topic/ui-testing`
-- ui-story present → `tag:topic/storybook`
-
-Also always attempt (skip silently if 0 results):
-```
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/a11y OR tag:topic/accessibility", path="repo-learnings/{repo}"
-```
-
-**Fallback**: if a vault call returns 0/error, read the equivalent flat file from `~/.claude/repo-learnings/$REPO/ui-patterns/` (or `a11y/`, `gotchas/`) once.
+**If SRC=flat (OSS/reference repo):** read `~/.claude/repo-learnings/$REPO/index.md`, `gotchas.md`, and `ui-patterns.md` always; add `advanced-patterns.md`/`test-patterns.md` per the file-category map.
 
 **If no UI learnings exist**:
 ```

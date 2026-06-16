@@ -33,7 +33,8 @@ Gather orientation data. Run these in parallel:
 
 ```bash
 # Repo identity
-REPO=$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))
+REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
 echo "=== Repo: $REPO ==="
 
 # Directory structure (top 3 levels, no node_modules / dist / .git)
@@ -401,10 +402,19 @@ End with a brief summary:
 
 ## Step 5: Write Learnings File
 
-After presenting findings to the user, write a structured learnings file so these patterns are available to future sessions and other skills.
+`~/.claude/repo-learnings/` is the PERSONAL layer — it holds patterns from OSS/reference checkouts only, and feeds `/synthesize-patterns`. A work repo's code knowledge belongs in its own `./wiki/`, not here (writing it to the personal layer duplicates canonical knowledge). So the persistence below is gated on the repo having no wiki. Steps 1–4 (the interactive analysis) still run anywhere — this guard only governs *where the findings persist*.
 
 ```bash
-REPO=$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))
+# Work-repo guard: if this repo has a ./wiki/, its patterns belong in the wiki,
+# not in the personal flat-file layer. Skip the write and route to the wiki workflow.
+if [ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ]; then
+  echo "This repo has a ./wiki/ — capture these patterns via /wiki-braindump then /wiki-ingest, not flat learnings."
+  echo "(Skipping the patterns.md write; Steps 1–4 analysis above still stands.)"
+  exit 0
+fi
+
+REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
 LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
 mkdir -p "$LEARNINGS_DIR"
 echo "Writing patterns.md to $LEARNINGS_DIR"

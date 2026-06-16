@@ -1,6 +1,6 @@
 ---
 name: learn-repo
-description: Analyzes the current repo's code and writes structured learnings to ~/.claude/repo-learnings/{repo}/. Repo-agnostic. Accepts an optional path to scope analysis to a specific feature or file. Use when starting work on an unfamiliar codebase or before implementing a feature.
+description: Analyzes an OSS/reference repo's code and writes structured flat-file learnings to ~/.claude/repo-learnings/{repo}/. For repos with no ./wiki/ (a work repo's canonical knowledge belongs in its wiki via /wiki-braindump + /wiki-ingest instead). Accepts an optional path to scope analysis. Use when starting work on an unfamiliar codebase.
 version: 1.0.0
 triggers:
   explicit:
@@ -24,9 +24,20 @@ Analyze the current repo's code — components, patterns, conventions, test stru
 ## Step 1: Identify Repo and Scope
 
 ```bash
-# Repo name — use git root dirname, no remote lookup needed
-REPO=$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))
+# Repo name — derive from the remote so it's stable across git worktrees
+# (basename of the worktree dir would key learnings under the worktree name, not the repo).
+REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
+[ -z "$REPO" ] && REPO="no-repo"
 echo "Repo: $REPO"
+
+# Work-repo guard: if this repo has a ./wiki/, its canonical knowledge belongs in the wiki,
+# not in flat learnings. Stop and route to the wiki workflow instead.
+if [ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ]; then
+  echo "This repo has a ./wiki/ — capture code knowledge via /wiki-braindump then /wiki-ingest, not /learn-repo."
+  echo "(/learn-repo is for OSS/reference checkouts that have no wiki.)"
+  exit 0
+fi
 
 # Short-circuit if learnings already exist
 LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
@@ -134,64 +145,23 @@ Identify 1-3 files or features that represent the cleanest, most idiomatic examp
 
 ## Step 7: Write Learnings
 
-Write to the Obsidian vault at `/Users/bwarzeski/.claude/obsidian-vault/repo-learnings/$REPO/` using `create-note` MCP calls. All notes must include frontmatter with `repo`, `category`, `tags`, and `last-updated` fields.
+Write flat markdown files to `~/.claude/repo-learnings/$REPO/`. Each file starts with a one-line `Last analyzed: {ISO-date}` and a short scope line. Keep them concise and synthesized — these feed `load-learnings` (distilled to ≤200 lines) and `synthesize-patterns` (cross-repo), so favor durable rules over verbatim code.
 
-**Vault path:** `/Users/bwarzeski/.claude/obsidian-vault/repo-learnings/$REPO/`
-
-**Frontmatter schema for every note:**
-```yaml
----
-repo: {repo-name}
-category: {ui-patterns | gotchas | test-patterns | standards | file-structure | index}
-tags:
-  - repo/{repo-name}
-  - category/{category}
-  - topic/{specific-topic}   # one or more topic tags (see below)
-last-updated: {ISO-date}
----
+```bash
+LD=~/.claude/repo-learnings/$REPO
+mkdir -p "$LD"
 ```
 
-**Topic tags to use:**
-- `topic/components` — component structure, props, presentational/container split
-- `topic/data-fetching` — API hooks, query patterns
-- `topic/state-management` — Zustand, XState, local state
-- `topic/forms` — form patterns
-- `topic/testing` — any test content
-- `topic/e2e` — Cypress-specific
-- `topic/unit-tests` — Vitest-specific
-- `topic/file-placement` — where things go, naming
-- `topic/typescript` — TS config, strict flags
-- `topic/eslint` — lint rules
-- `topic/gotcha` — traps and anti-patterns
-- `topic/design-system` — component library wrappers
+Write these files (the established layout — only the ones the analysis actually produced):
+- `index.md` — written **last**. Summary, reference implementations (1-3 cleanest examples), and a pointer list to the other files. Include `Last analyzed: {date}`.
+- `ui-patterns.md` — component structure, design-system wrappers, data-fetching, state-management, hook composition.
+- `advanced-patterns.md` — deeper/rarer patterns worth recording separately (optional).
+- `file-structure.md` — directory conventions, where things live, naming.
+- `gotchas.md` — anti-patterns and traps (one line each).
+- `test-patterns.md` — unit (Vitest) + E2E (Cypress) conventions, mocks, fixtures, wait strategy.
+- `standards.md` — enforced TS strict flags, ESLint rules that reject common patterns, Prettier non-defaults.
 
-**Note structure (split from the old flat files):**
-
-Create notes in these subdirectories:
-- `ui-patterns/component-structure.md` — presentational/container split, props conventions. Tags: `topic/components`
-- `ui-patterns/design-system.md` — component library wrapper rules. Tags: `topic/design-system`, `topic/components`
-- `ui-patterns/data-fetching.md` — API hooks, query patterns. Tags: `topic/data-fetching`
-- `ui-patterns/state-management.md` — state libraries and rules. Tags: `topic/state-management`
-- `ui-patterns/hook-composition.md` — custom hook patterns. Tags: `topic/components`, `topic/state-management`
-- `file-structure.md` — directory conventions, naming. Tags: `topic/file-placement`
-- `gotchas/component-antipatterns.md` — Tags: `topic/gotcha`, `topic/components`, `topic/design-system`
-- `gotchas/state-antipatterns.md` — Tags: `topic/gotcha`, `topic/state-management`
-- `gotchas/form-traps.md` — Tags: `topic/gotcha`, `topic/forms`
-- `gotchas/test-traps.md` — Tags: `topic/gotcha`, `topic/testing`
-- `test-patterns/e2e-patterns.md` — Tags: `topic/testing`, `topic/e2e`
-- `test-patterns/unit-patterns.md` — Tags: `topic/testing`, `topic/unit-tests`
-- `standards/typescript.md` — Tags: `topic/typescript`
-- `standards/eslint.md` — Tags: `topic/eslint`
-- `standards/prettier.md` — Tags: `topic/eslint`
-
-Create notes using MCP:
-```
-mcp__obsidian__create-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}", content="{frontmatter + content}"
-```
-
-Create `index.md` last (it references all other notes). It should list all notes created under "Learnings Notes" and include the summary and reference implementations.
-
-**Also write flat files as fallback** to `~/.claude/repo-learnings/$REPO/` using the original format, so skills that haven't been updated yet continue to work.
+For a **scoped run** (path argument given): write `~/.claude/repo-learnings/$REPO/scoped/{slug}.md` and add a pointer to it in `index.md` rather than rewriting the top-level files.
 
 ## Step 8: Confirm
 

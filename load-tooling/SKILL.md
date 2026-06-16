@@ -106,7 +106,7 @@ inputs: []
 ---
 ```
 
-Then the structured content in this exact format:
+Then the structured content in this exact format. **Hard cap: 120 lines total** — this file is read by every downstream pipeline skill, so record only constraints that affect implementation; do not paste config verbatim.
 
 ```
 ## TypeScript

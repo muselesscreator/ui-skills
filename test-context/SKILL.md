@@ -25,28 +25,18 @@ git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//'
 
 ## Step 2: Load Stored Learnings
 
-Load test pattern learnings from the Obsidian vault using MCP search:
-
-```
-# Search for test pattern notes
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/testing", path="repo-learnings/{repo-name}"
+Load test pattern learnings. Source depends on the repo:
+```bash
+[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
 ```
 
-Read any notes returned (e2e-patterns.md, unit-patterns.md). Then search for test-related gotchas:
+**If SRC=wiki (work repo — canonical):** query QMD scoped to `collections: ["wiki"]` with `intent` for test conventions (unit + E2E patterns, mocks, fixtures, wait strategy) and test-related gotchas. Read top `qmd://wiki/...` hits.
 
-```
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo-name}/gotchas"
-```
+**If SRC=flat (OSS/reference repo):** read `~/.claude/repo-learnings/$REPO/test-patterns.md` and the test-related entries in `gotchas.md`.
 
-If `test-traps.md` is in the results, read it.
-
-**Fallback:** If the vault search returns 0 results (vault not configured or repo not yet in vault):
+If neither source yields anything:
 ```
-Read ~/.claude/repo-learnings/{repo-name}/test-patterns.md
-```
-If that also does not exist, output a warning:
-```
-⚠ No test learnings found for this repo. Run /learn-repo first for better results.
+⚠ No test learnings found for this repo. For a work repo run /wiki-index; for an OSS checkout run /learn-repo.
 Proceeding with live scan only.
 ```
 

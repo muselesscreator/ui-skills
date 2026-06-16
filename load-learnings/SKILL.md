@@ -1,7 +1,7 @@
 ---
 name: load-learnings
 internal: true
-description: "Pipeline context skill. Loads Obsidian vault learnings for the current repo scoped to task keywords, distills them into a single bounded context file for use by pipe-plan and pipe-impl."
+description: "Pipeline context skill. Loads stored repo learnings (wiki via QMD when the repo has one, else flat-file repo-learnings) scoped to task keywords, distills them into a single bounded context file for use by pipe-plan and pipe-impl."
 version: 1.0.0
 ---
 
@@ -15,8 +15,8 @@ This is an internal pipeline skill. It is not invoked directly by users — it i
 
 None from `*-latest.md` files. Reads directly from:
 - `~/.claude/skill-output/$REPO/$BRANCH/pipeline-state.json` (for task description fallback)
-- Obsidian vault: `repo-learnings/{repo}/`
-- Flat file fallback: `~/.claude/repo-learnings/$REPO/`
+- **Canonical source (work repos):** the repo's `./wiki/`, queried via the QMD `wiki` collection
+- **Flat-file source (OSS/reference repos with no wiki):** `~/.claude/repo-learnings/$REPO/`
 
 ## Step 1: Get Repo and Branch
 
@@ -29,51 +29,40 @@ STATE_FILE=~/.claude/skill-output/$REPO/$BRANCH/pipeline-state.json
 
 If $ARGUMENTS is empty, read `pipeline-state.json` to get the task description and derive keywords from it. If pipeline-state.json also does not exist, use the repo name as the only keyword.
 
-## Step 2: Load from Obsidian Vault
+## Step 2: Load learnings
 
-Use these MCP calls. All vault calls use `vault="obsidian-vault"` and `path="repo-learnings/{repo}"`.
+Pick the source by what the repo has. A repo with a `./wiki/` directory is a **work repo** — its canonical code knowledge lives in the wiki (indexed by QMD); recall from there. A repo with no wiki (OSS/reference checkout) keeps its learnings as flat files under `~/.claude/repo-learnings/$REPO/`.
 
-**Always load (regardless of keywords):**
-
-```
-mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo}"
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo}/gotchas"
-→ Read all returned notes
-mcp__obsidian__read-note: vault="obsidian-vault", filename="file-structure.md", folder="repo-learnings/{repo}"
+```bash
+[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
 ```
 
-**Load based on keywords in $ARGUMENTS:**
+### If SRC=wiki — query QMD (canonical)
 
-- If any keyword contains "component", "form", or "design":
-  ```
-  mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/components", path="repo-learnings/{repo}/ui-patterns"
-  → Read all returned notes
-  ```
-
-- If any keyword contains "data", "fetch", "api", or "hook":
-  ```
-  mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/data-fetching", path="repo-learnings/{repo}/ui-patterns"
-  → Read all returned notes
-  ```
-
-- If any keyword contains "state", "store", or "zustand":
-  ```
-  mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/state-management", path="repo-learnings/{repo}/ui-patterns"
-  → Read all returned notes
-  ```
-
-**One content search (always):**
+Scope every query to `collections: ["wiki"]` and set `intent`. Run one always-on query plus keyword-driven ones, then read the top hits with `_get`/`_multi_get`.
 
 ```
-mcp__obsidian__search-vault: vault="obsidian-vault", query="{first meaningful noun from $ARGUMENTS}", path="repo-learnings/{repo}"
-→ Read any notes returned that were not already loaded above
+# Always:
+mcp__plugin_qmd_qmd__query: collections=["wiki"], intent="repo conventions + gotchas for the current task",
+  searches=[{type:"lex", query:"gotchas conventions file structure"}, {type:"vec", query:"project conventions and anti-patterns"}]
+
+# Per keyword in $ARGUMENTS — add a sub-query for each (components/data-fetching/state/etc.):
+#   {type:"lex", query:"<keyword>"}, {type:"vec", query:"how this repo handles <keyword>"}
 ```
 
-**Fallback:** If ANY vault search or read returns 0 results or an error, attempt the equivalent flat file read from `~/.claude/repo-learnings/$REPO/`. For example: `index.md` → `~/.claude/repo-learnings/$REPO/index.md`, gotchas → `~/.claude/repo-learnings/$REPO/gotchas/`.
+Read the highest-scoring returned `qmd://wiki/...` notes with `mcp__plugin_qmd_qmd__multi_get`. If QMD returns nothing useful, fall back to flat files (below) before giving up.
 
-If both vault and flat files return nothing, note it at the top of the output:
+### If SRC=flat — read flat files directly
+
+```bash
+LD=~/.claude/repo-learnings/$REPO
+cat "$LD/index.md" "$LD/file-structure.md" "$LD/gotchas.md" 2>/dev/null
+# keyword-driven: add ui-patterns.md / advanced-patterns.md / test-patterns.md / standards.md as the keywords warrant
 ```
-⚠ No learnings found for {repo}. Run /learn-repo first for best results.
+
+If neither source returns anything, note it at the top of the output:
+```
+⚠ No learnings found for {repo}. For a work repo run /wiki-index then query QMD; for an OSS checkout run /learn-repo.
 Proceeding without learnings context.
 ```
 
@@ -126,7 +115,7 @@ inputs: []
 
 Then the distilled content from Step 3.
 
-If any step failed (vault unreachable, no files readable), write the output file anyway with an `## ERROR` section at the top before the distilled content, describing what failed. Never fail silently.
+If any step failed (QMD unreachable, no files readable), write the output file anyway with an `## ERROR` section at the top before the distilled content, describing what failed. Never fail silently.
 
 ## Step 5: Create Symlink
 

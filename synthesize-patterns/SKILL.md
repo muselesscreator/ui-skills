@@ -24,6 +24,8 @@ confidence_threshold: 75
 
 Read all `patterns.md` learnings files from `~/.claude/repo-learnings/` and synthesize cross-repo insights: universal patterns, conflicting approaches, complementary pairs, and overarching principles.
 
+This is the PERSONAL layer's synthesis engine: it distills general, repo-agnostic engineering knowledge from OSS/reference checkouts into `~/.claude/cross-repo-learnings/synthesis.md`. **Synthesize OSS/reference repos only.** A work repo's `patterns.md` (one whose source repo has a `./wiki/`, e.g. `incentives`) is code-specific knowledge headed for that repo's wiki — exclude it from the synthesis so the personal layer holds zero code-specific facts.
+
 ---
 
 ## Step 1: Discover Available Repos
@@ -39,6 +41,8 @@ for f in ~/.claude/repo-learnings/*/patterns.md; do
   echo "  $repo — $scope"
 done
 ```
+
+Exclude any **work-repo** dir from the synthesis set — these are code-specific learnings pending migration to that repo's wiki (Phase D of the skill-system optimization), not personal-layer material. Today that means skipping `incentives`. Flag it in the Step 2 scope summary as excluded-by-design rather than silently dropping it.
 
 If no `patterns.md` files exist at all, stop and tell the user:
 ```

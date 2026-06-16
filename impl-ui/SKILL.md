@@ -25,27 +25,15 @@ confidence_threshold: 75
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
 ```
 
-Load learnings from the Obsidian vault:
+Load learnings. Source depends on the repo: a repo with a `./wiki/` (work repo) keeps canonical knowledge in the wiki (QMD `wiki` collection); a repo with none (OSS checkout) uses flat files under `~/.claude/repo-learnings/$REPO/`.
 
-```
-# Always load index (reference implementations)
-mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo-name}"
-
-# Always load gotchas
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo-name}/gotchas"
-→ Read all returned notes
-
-# Always load file placement
-mcp__obsidian__read-note: vault="obsidian-vault", filename="file-structure.md", folder="repo-learnings/{repo-name}"
+```bash
+[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
 ```
 
-If a plan file is being used, extract the "Patterns to Follow" section and search for each pattern specifically:
-```
-mcp__obsidian__search-vault: vault="obsidian-vault", query="{pattern keyword}", path="repo-learnings/{repo-name}"
-→ Read the specific notes returned
-```
+**If SRC=wiki** — query QMD, scoped to `collections: ["wiki"]` with an `intent`, for reference implementations, gotchas/conventions, and file placement; then read the top hits with `_get`/`_multi_get`. If a plan file is in use, add a sub-query per pattern in its "Patterns to Follow" section.
 
-**Fallback:** If vault search returns 0 results, read flat files from `~/.claude/repo-learnings/$REPO/`.
+**If SRC=flat** — read `~/.claude/repo-learnings/$REPO/index.md`, `gotchas.md`, and `file-structure.md`; for plan patterns, also read `ui-patterns.md`/`advanced-patterns.md`.
 
 If $ARGUMENTS contains "use plan": find the most recent plan file with `ls -t ~/.claude/skill-output/$REPO/$BRANCH/plan-*.md 2>/dev/null | head -1` and read it as the implementation spec.
 If $ARGUMENTS contains a file path: read that file as the implementation spec.
@@ -124,35 +112,11 @@ Write this report to `~/.claude/skill-output/$REPO/$BRANCH/impl-report-$TS.md` s
 
 ## Step 5: Update Repo Learnings
 
-After implementation, capture anything new or surprising. Write back to the Obsidian vault using the edit-note pattern: read the note first, merge new content, then write the updated note.
+After implementation, capture anything new or surprising. Where it goes depends on the repo:
 
-**`gotchas/` — add to the relevant note if:**
-- You hit a trap that wasn't already documented
-- You found a `// HACK`, `// NOTE`, or `// FIXME` comment while reading code that isn't captured yet
-- A deviation from pattern was necessary and the reason is non-obvious
+- **Work repo (has `./wiki/`)** — never hand-edit the wiki. Surface new knowledge via `/wiki-braindump` so the next `/wiki-ingest` absorbs it. Capture it if: you hit an undocumented trap; found a `// HACK`/`// NOTE`/`// FIXME` not yet recorded; established or discovered an undocumented pattern; a tooling constraint forced a non-obvious fix; or you created files in a location not previously described.
 
-**`ui-patterns/` — add to the relevant note if:**
-- You established a new pattern that didn't exist before
-- You discovered an existing pattern that wasn't documented
-
-**`standards/` — add to the relevant note if:**
-- A tooling constraint caused a non-obvious fix
-
-**`file-structure.md` — update if:**
-- You created files in a location that wasn't previously described
-
-Write pattern:
-```
-# 1. Read current note content
-mcp__obsidian__read-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}"
-
-# 2. Merge new findings into content, update last-updated date in frontmatter
-
-# 3. Write back
-mcp__obsidian__edit-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}", content="{full updated content}"
-```
-
-**Fallback:** If vault not available, append to `~/.claude/repo-learnings/$REPO/{filename}.md` directly.
+- **OSS/reference repo (no wiki)** — append to the relevant flat file under `~/.claude/repo-learnings/$REPO/` (`gotchas.md`, `ui-patterns.md`, `standards.md`, `file-structure.md`), bumping its `Last analyzed` date.
 
 Format new gotcha entries as:
 ```markdown

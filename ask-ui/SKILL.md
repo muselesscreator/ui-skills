@@ -83,38 +83,20 @@ REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
 [ -z "$REPO" ] && REPO=$(basename $(git rev-parse --show-toplevel 2>/dev/null) 2>/dev/null)
 ```
 
-Always read first (small, anchors everything):
+Pick the source by what the repo has:
+```bash
+[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
 ```
-mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo}"
-```
-Fallback if not found: `~/.claude/repo-learnings/$REPO/index.md`.
 
-If neither exists:
+**If SRC=wiki** — query QMD scoped to `collections: ["wiki"]` with an `intent`. Always run a gotchas/conventions query; add a keyword-driven sub-query for the most specific noun in the question (components / data-fetching / state / routing / testing as relevant). Read the top `qmd://wiki/...` hits with `_get`/`_multi_get`.
+
+**If SRC=flat** — read `~/.claude/repo-learnings/$REPO/index.md` and `gotchas.md` always; conditionally add `ui-patterns.md`/`advanced-patterns.md`/`test-patterns.md` based on the question's keywords.
+
+If neither source yields anything:
 ```
 ⚠ No learnings found for {repo}. Answering from code only — accuracy may be lower for conventions/gotchas.
 ```
 Proceed without halting.
-
-**Always load gotchas** (small, often relevant to "why" questions):
-```
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo}/gotchas"
-→ Read all returned notes
-```
-
-**Conditionally load patterns** based on keywords in the question:
-- `component`, `form`, `design` → search `tag:topic/components` in `ui-patterns/`
-- `data`, `fetch`, `api`, `hook`, `query`, `mutation` → search `tag:topic/data-fetching`
-- `state`, `store`, `zustand`, `xstate` → search `tag:topic/state-management`
-- `route`, `nav`, `link` → search `tag:topic/routing` (skip if not found)
-- `test`, `cypress`, `vitest`, `spec` → search `tag:topic/testing`
-
-**One content search** against the most specific noun in the question:
-```
-mcp__obsidian__search-vault: vault="obsidian-vault", query="<noun>", path="repo-learnings/{repo}"
-→ Read any notes not already loaded
-```
-
-Fallback to flat files in `~/.claude/repo-learnings/$REPO/` for any search that returns 0 results.
 
 Cap total loaded learnings at ~150 lines of synthesized notes — trim, do not paste verbatim.
 

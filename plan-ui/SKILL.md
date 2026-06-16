@@ -29,60 +29,24 @@ confidence_threshold: 75
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
 ```
 
-Load learnings from the Obsidian vault using targeted MCP search:
-
-**1. Always read index first** (small, contains reference implementations):
-```
-mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo-name}"
+Load learnings. Source depends on the repo:
+```bash
+[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
 ```
 
-If index.md is not found, fall back to flat file: `~/.claude/repo-learnings/$REPO/index.md`. If neither exists:
+**If SRC=wiki (work repo — canonical):** query QMD scoped to `collections: ["wiki"]` with an `intent`. Always pull reference implementations, gotchas/conventions, file placement, and enforced standards (TS/ESLint/Prettier); add a keyword-driven sub-query per the task's focus (components / data-fetching / state). Read top `qmd://wiki/...` hits with `_get`/`_multi_get`. The wiki is maintained via `/wiki-ingest`, so no staleness check is needed.
+
+**If SRC=flat (OSS/reference repo):** read `~/.claude/repo-learnings/$REPO/index.md` (reference implementations), `gotchas.md`, `file-structure.md`, `standards.md` always; add `ui-patterns.md`/`advanced-patterns.md` based on task keywords. Check freshness from the `Last analyzed` header — if >20 source files changed since:
+```bash
+git log --since="{last-analyzed}" --name-only --pretty=format: | sort -u | grep -v '^$' | grep -E "\.(ts|tsx|js|jsx)$" | wc -l
 ```
-⚠ No learnings found for {repo-name}. Run /learn-repo first for best results.
+If stale, call `/update-learnings` then re-read.
+
+If neither source yields anything:
+```
+⚠ No learnings found for {repo-name}. For a work repo run /wiki-index; for an OSS checkout run /learn-repo.
 Proceeding with live analysis only — this will be slower.
 ```
-
-**2. Check freshness** from `last-updated` frontmatter. If more than 20 source files changed since that date:
-```bash
-git log --since="{last-updated}" --name-only --pretty=format: | sort -u | grep -v '^$' | grep -E "\.(ts|tsx|js|jsx)$" | wc -l
-```
-If stale: call `/update-learnings`, then re-read.
-
-**3. Load task-scoped patterns** based on $ARGUMENTS keywords:
-
-Always load:
-```
-# Gotchas — always load all (they're small)
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/gotcha", path="repo-learnings/{repo-name}/gotchas"
-→ Read all returned notes
-
-# File placement — always needed
-mcp__obsidian__read-note: vault="obsidian-vault", filename="file-structure.md", folder="repo-learnings/{repo-name}"
-
-# Standards — always needed for tooling constraints
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:category/standards", path="repo-learnings/{repo-name}/standards"
-→ Read all returned notes (typescript.md, eslint.md, prettier.md)
-```
-
-Load based on task keywords in $ARGUMENTS:
-```
-# If task involves components, forms, or design system:
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/components", path="repo-learnings/{repo-name}/ui-patterns"
-
-# If task involves data fetching or API hooks:
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/data-fetching", path="repo-learnings/{repo-name}/ui-patterns"
-
-# If task involves state (Zustand, XState, store):
-mcp__obsidian__search-vault: vault="obsidian-vault", query="tag:topic/state-management", path="repo-learnings/{repo-name}/ui-patterns"
-```
-
-Also do one content search against the task description to surface cross-cutting notes:
-```
-mcp__obsidian__search-vault: vault="obsidian-vault", query="{first meaningful noun from $ARGUMENTS}", path="repo-learnings/{repo-name}"
-→ Read any notes returned that weren't already loaded
-```
-
-**Fallback:** If any vault search returns 0 results, read the corresponding flat file directly from `~/.claude/repo-learnings/$REPO/`.
 
 ## Step 2: Check Local Code State
 

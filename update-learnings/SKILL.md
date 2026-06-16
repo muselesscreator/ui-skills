@@ -1,6 +1,6 @@
 ---
 name: update-learnings
-description: Re-analyzes the current repo (or a scoped path) and updates stored learnings at ~/.claude/repo-learnings/{repo}/. Diffs against current code state. Use when learnings are out of date, patterns have changed, or after significant refactoring.
+description: Re-analyzes an OSS/reference repo (or a scoped path) and updates flat-file learnings at ~/.claude/repo-learnings/{repo}/, diffing against current code state. For repos with no ./wiki/ (a work repo's wiki is refreshed via /wiki-ingest instead). Use when learnings are out of date or patterns have changed.
 version: 1.0.0
 triggers:
   explicit:
@@ -24,16 +24,16 @@ Re-run the learn-repo analysis and update only what has changed. Does not wipe a
 
 ```bash
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
+
+# Work-repo guard: a repo with a ./wiki/ is refreshed via the wiki workflow, not flat learnings.
+if [ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ]; then
+  echo "This repo has a ./wiki/ — refresh it via /wiki-ingest (it detects changed sources via SHA), not /update-learnings."
+  exit 0
+fi
 ```
 
-Read `index.md` from the Obsidian vault first:
-```
-mcp__obsidian__read-note: vault="obsidian-vault", filename="index.md", folder="repo-learnings/{repo-name}"
-```
-
-Note the `last-updated` date from frontmatter.
-
-**Fallback:** If vault not available, read `~/.claude/repo-learnings/$REPO/index.md` and note the `Last analyzed` date.
+Read `~/.claude/repo-learnings/$REPO/index.md` and note the `Last analyzed` date from its header.
 
 ## Step 2: Get Changed Files Since Last Analysis
 
@@ -53,19 +53,15 @@ Run the same analysis as `learn-repo` but focused on:
 
 ## Step 4: Diff and Update
 
-For each affected note in the vault, compare new findings to stored content using the read-merge-edit pattern:
+For each affected file in `~/.claude/repo-learnings/$REPO/`, compare new findings to stored content using read-merge-write:
 
 ```
-# 1. Read current note
-mcp__obsidian__read-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}"
-
-# 2. Merge: add new patterns, remove resolved gotchas, update stale content
-
-# 3. Write back with updated last-updated date in frontmatter
-mcp__obsidian__edit-note: vault="obsidian-vault", filename="{note}.md", folder="repo-learnings/{repo-name}/{subfolder}", content="{full merged content}"
+# 1. Read the current file (e.g. ui-patterns.md, gotchas.md)
+# 2. Merge: add new patterns, remove resolved gotchas, update stale content — preserve what's still accurate
+# 3. Write the merged content back, bumping `Last analyzed: {date}` in the header
 ```
 
-After updating vault notes, also update corresponding flat files in `~/.claude/repo-learnings/$REPO/` to keep fallback in sync.
+Update `index.md`'s `Last analyzed` date last.
 
 Report what changed:
 ```
@@ -76,7 +72,7 @@ Changes:
 ~ Updated: [pattern that changed] → [note name]
 - Removed: [pattern no longer present] → [note name]
 
-Notes updated:
-- ui-patterns/state-management.md
-- gotchas/component-antipatterns.md
+Files updated:
+- ui-patterns.md
+- gotchas.md
 ```
