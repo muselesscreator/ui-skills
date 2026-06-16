@@ -51,5 +51,9 @@ steps:
 
 ## Cycle-types
 
-- **feature-cycle** — plan → impl → validate (gate) → cleanup → commit →
+- **feature-cycle** — analyze → plan → impl → validate (gate) → cleanup → commit →
   braindump (repo-local, interactive) → ingest (repo-local). The UI feature/ticket loop.
+- **simple-task** — impl → cleanup → commit. The lightweight loop for a small,
+  already-understood change (test tweak, copy/style fix, one- or two-file edit).
+  No analyze/plan/validate, no opus steps. Falls back to feature-cycle when the
+  change needs discovery, a plan, or a behavioral gate.
