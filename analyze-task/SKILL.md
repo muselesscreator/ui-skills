@@ -35,6 +35,21 @@ OUT=~/.claude/skill-output/$REPO/$BRANCH
 mkdir -p "$OUT"
 ```
 
+## Step 1.5: Seed from a prior savepoint handoff (if present)
+
+A `/savepoint` handoff often already enumerates the files, decisions, and gotchas this task touches — re-deriving them cold is the main waste this skill can avoid. If `$OUT/handoff-latest.md` exists, read it:
+
+```bash
+[ -f "$OUT/handoff-latest.md" ] && echo "seed: $(readlink "$OUT/handoff-latest.md")"
+```
+
+Treat it as a **seed, not ground truth** — it reflects state when written, which may be stale:
+- Its **Key Files** are candidate *mentioned files*: fold them into Step 5 instead of re-discovering, but still read each to confirm it's current.
+- Its **Decisions / Open Questions / Gotchas** seed the matching artifact sections — attribute each with `(from handoff)` so the planner knows the provenance and can re-check it.
+- Its **State** is a hint only. Step 3's live `git diff` stays the source of truth for in-flight state; if they disagree, trust git and note the drift.
+
+If the handoff already covers the whole task (files + gotchas + decisions), keep Steps 2–5 to **confirming** its facts rather than rebuilding them — that's the point of seeding. Record the source in the artifact frontmatter (`seeded_from:` in Step 6). If no handoff exists, skip this step silently.
+
 ## Step 2: Load and refresh repo learnings
 
 Load learnings. Source depends on the repo:
@@ -121,6 +136,7 @@ repo: {repo}
 branch: {branch}
 timestamp: {ISO-8601 datetime}
 task: {one-line task description from $ARGUMENTS}
+seeded_from: {handoff-<ts>.md if Step 1.5 found one, else "none"}
 ---
 
 ## Task Classification
