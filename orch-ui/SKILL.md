@@ -25,7 +25,7 @@ You are the **orchestrator**. You run a selected cycle's steps **in order**, eac
 
 Do this **before touching anything**. Never run a step until the user has confirmed the cycle-type.
 
-1. Enumerate available cycle-types: read each `~/.claude/cycles/*.md` and pull its `name` + `description` from frontmatter (ignore `README.md`).
+1. Enumerate available cycle-types: read each `~/.claude/skills/orch-ui/cycles/*.md` and pull its `name` + `description` from frontmatter (ignore `README.md`).
 2. **Guess** from `$ARGUMENTS`:
    - If the first token exactly matches a cycle `name`, take that as the cycle and treat the remainder as `$TASK`.
    - Otherwise, if `$ARGUMENTS` is non-empty, pick the best-matching cycle by description and treat the whole string as `$TASK`.
@@ -54,7 +54,7 @@ RUNLOG="$OUT/orch-run-$TS.md"
 
 ## Step 2: Load the chosen cycle definition
 
-Read `~/.claude/cycles/<cycle>.md`. Parse the `steps:` list from its frontmatter. Each step has:
+Read `~/.claude/skills/orch-ui/cycles/<cycle>.md`. Parse the `steps:` list from its frontmatter. Each step has:
 - `id` — short label
 - `skill` — the skill to invoke
 - `args` — argument string (may contain `$TASK`)
