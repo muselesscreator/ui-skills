@@ -17,6 +17,17 @@ Mechanics & caveats:
 - **Per-subagent effort** is only controllable when a skill is authored as a **Workflow** script (`agent()` takes `model` *and* `effort`). Reach for that only when effort tuning demonstrably matters — it's a real rewrite.
 - A skill that fans out (parallel specialists, or one subagent per step) is where tiering pays off most; single-context skills can ride the session model.
 
+## Shared helper scripts (`lib/`)
+
+Deterministic plumbing lives in `~/.claude/skills/lib/` as scripts skills call, not as bash re-emitted in every SKILL.md. Reuse these before inlining git/test boilerplate:
+
+- **`skill-env.sh`** — `source` it to set `REPO BRANCH BASE OUT TS SRC LEARNINGS_DIR ROOT` and `mkdir -p "$OUT"`. Replaces the repo/branch/timestamp/output-dir block. When a step writes a report via the Write tool, follow the `source` with `echo "$OUT/<name>-$TS.md"` so the literal path is visible to the tool (shell vars don't survive to a separate Write call).
+- **`find-affected-tests.sh`** — given changed/planned files (args or stdin), prints `DIRECT_UNIT/INDIRECT_UNIT/DIRECT_E2E/INDIRECT_E2E`. Used by cleanup-ui Step 5 and plan-ui Step 3.
+- **`cleanup-scope.sh`** — resolves changed files + affected-package `pnpm --filter` flags; writes `/tmp/cleanup-ui-changed.txt` and `/tmp/cleanup-ui-filters.txt`.
+- **`cleanup-verify.sh`** — runs type-check / lint / lint:prettier, pass-fail by exit code.
+
+When extracting more such logic, keep it a faithful port (don't change behavior in the same pass), make it runnable standalone, and pass cross-step state through `/tmp` files since each SKILL.md bash block is a fresh shell.
+
 ## Global-skill hygiene (invariant)
 
 A global skill path (`~/.claude/skills`) must never load a heavy *project* skill body (e.g. `prepare-branch`, `local-review`) to borrow its capability — that drags repo-specific bulk onto a repo-agnostic path. None do today; keep it that way. If a global path genuinely needs a project capability, write a lean global re-implementation of just that slice, don't reach into the project skill.

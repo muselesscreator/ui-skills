@@ -22,50 +22,34 @@ confidence_threshold: 80
 
 ## Step 1: Determine Scope
 
-If a path argument is given: scope to that path.
-Otherwise: resolve changed files using the first source that returns results:
+Resolve the changed files and the affected packages' `--filter` flags in one call. With a path argument, pass it to restrict the set to that path:
 
 ```bash
-# 1. Committed changes ahead of main
-CHANGED=$(git diff --name-only $(git merge-base HEAD main) HEAD 2>/dev/null)
-# 2. Staged changes (committed ahead = 0 but staged)
-[ -z "$CHANGED" ] && CHANGED=$(git diff --name-only --cached)
-# 3. Unstaged + untracked changes (branch with no commits yet)
-[ -z "$CHANGED" ] && CHANGED=$(git status --short | grep -v '^?? \.claude\|^?? \.cursor\|^?? thoughts/\|^?? specs/' | awk '{print $2}')
-echo "$CHANGED"
+~/.claude/skills/lib/cleanup-scope.sh "$ARGUMENTS"
 ```
 
-Extract the unique package directories from the changed files to scope lint to only affected packages:
-
-```bash
-echo "$CHANGED" | sed 's|/src/.*||' | sort -u
-```
+This writes the changed-file list to `/tmp/cleanup-ui-changed.txt` and the space-separated `pnpm --filter` flags to `/tmp/cleanup-ui-filters.txt` (empty when no package mapped → use the full-repo fallback). It prints a summary; read it to know the scope. Later steps reuse these files instead of re-running git.
 
 ## Step 2: Lint Fix
 
-Run lint fix scoped to affected packages only (faster than full-repo):
-
-```bash
-# Build --filter flags from changed package paths
-# e.g. if apps/app/src/foo.ts changed, run: pnpm --filter @eli/app lint:fix
-# Fall back to pnpm lint:fix if package mapping is unclear
-```
-
 Always run lint:fix **after all manual edits are complete** — running it mid-edit may auto-format partially-added imports incorrectly.
 
+Run ESLint fix scoped to the affected packages (faster than full-repo), falling back to full-repo if no filters were resolved:
+
 ```bash
-pnpm lint:fix 2>&1 | tee /tmp/lint-output.txt
+FILTERS=$(cat /tmp/cleanup-ui-filters.txt 2>/dev/null)
+if [ -n "$FILTERS" ]; then pnpm $FILTERS lint:fix 2>&1 | tee /tmp/lint-output.txt
+else pnpm lint:fix 2>&1 | tee /tmp/lint-output.txt; fi
 ```
 
 Read output. List what was auto-fixed and what requires manual attention.
 
-**Also run Prettier** — ESLint and Prettier are separate checks in CI (`lint` vs `lint:prettier`). ESLint's `lint:fix` does NOT run Prettier. Always run Prettier write after ESLint fix:
+**Also run Prettier** — ESLint and Prettier are separate checks in CI (`lint` vs `lint:prettier`). ESLint's `lint:fix` does NOT run Prettier. Always run Prettier write after ESLint fix, scoped to the same packages:
 
 ```bash
-# Scoped to affected packages (same --filter flags as lint:fix above)
-pnpm --filter <affected-packages> lint:prettier:fix 2>&1 | tee /tmp/prettier-output.txt
-# Or full-repo fallback:
-pnpm prettier . --write 2>&1 | tail -5
+FILTERS=$(cat /tmp/cleanup-ui-filters.txt 2>/dev/null)
+if [ -n "$FILTERS" ]; then pnpm $FILTERS lint:prettier:fix 2>&1 | tee /tmp/prettier-output.txt
+else pnpm prettier . --write 2>&1 | tail -5; fi
 ```
 
 If a package has no `lint:prettier:fix` script, run `pnpm prettier <files> --write` directly on the changed files.
@@ -103,47 +87,18 @@ Remove dead code. **NEVER prefix unused variables with `_` to suppress warnings 
 
 ## Step 5: Check for Affected Test Files
 
-Use the same `$CHANGED` list from Step 1 (do not re-run git diff).
-
-**Unit tests — direct:**
-```bash
-echo "$CHANGED" | grep -E "\.(test|spec)\.(ts|tsx)$"
-```
-If unit test files are in scope, call `/cleanup-unit-tests` for them.
-
-**Unit tests — indirect (changed source may break existing tests):**
-For each changed source file (non-test), check whether a sibling test file exists:
-```bash
-for f in $(echo "$CHANGED" | grep -E "\.(ts|tsx)$" | grep -vE "\.(test|spec)\.(ts|tsx)$"); do
-  dir=$(dirname "$f")
-  base=$(basename "$f" | sed 's/\.[^.]*$//')
-  ext="${f##*.}"
-  # Check sibling test file
-  for candidate in "$dir/$base.test.$ext" "$dir/$base.spec.$ext" "$dir/__tests__/$base.test.$ext" "$dir/__tests__/$base.spec.$ext"; do
-    [ -f "$candidate" ] && echo "$candidate"
-  done
-done | sort -u
-```
-If any indirect test files are found that were NOT already in the direct list, add them to the unit test cleanup scope and run them. A source file reorder/rename that breaks its test should be caught here before CI does.
-
-**E2E tests — direct:**
-```bash
-echo "$CHANGED" | grep -E "\.cy\.(ts|tsx)$"
-```
-If Cypress spec files are in scope, call `/cleanup-e2e-tests` for them.
-
-**E2E tests — indirect (changed source may break existing specs):**
-Even if no `.cy.ts` files are in the diff, check whether the changed source files are exercised by existing E2E specs:
+Map the changed files (from Step 1) to the tests they affect — directly and indirectly — in one call:
 
 ```bash
-# For each changed source file, extract its component/feature name and search E2E specs
-for f in $(echo "$CHANGED" | grep -E "\.(ts|tsx)$" | grep -v test | grep -v spec); do
-  name=$(basename "$f" | sed 's/\.[^.]*$//')
-  grep -rl "$name" packages/e2e/tests/specs/ 2>/dev/null
-done | sort -u
+~/.claude/skills/lib/find-affected-tests.sh < /tmp/cleanup-ui-changed.txt
 ```
 
-If any E2E specs reference the changed components or feature paths:
+This prints four lists: `DIRECT_UNIT` / `DIRECT_E2E` (test files in the change set) and `INDIRECT_UNIT` / `INDIRECT_E2E` (sibling unit tests that exist on disk, and e2e specs that reference a changed source's name — found before CI does).
+
+- If `DIRECT_UNIT` or `INDIRECT_UNIT` is non-empty: call `/cleanup-unit-tests` for those files (the indirect ones catch a source rename/reorder breaking its test).
+- If `DIRECT_E2E` is non-empty: call `/cleanup-e2e-tests` for those specs.
+
+For any `INDIRECT_E2E` specs (source changes may break an existing flow):
 ```
 ⚠ Existing E2E specs may be affected by source changes:
   - {spec file}: references {component/feature}
@@ -160,22 +115,20 @@ If specs are intact but the check revealed a gap in coverage, note it in the rep
 
 ## Step 6: Final Verification
 
+Run all three gate checks (type-check, lint, lint:prettier) and report pass/fail by exit code. Prettier is a separate CI check from ESLint and is verified explicitly:
+
 ```bash
-pnpm type-check 2>&1 | tail -5
-pnpm lint 2>&1 | tail -5
-# Prettier is a separate CI check — must verify it explicitly
-pnpm --filter <affected-packages> lint:prettier 2>&1 | tail -5
+~/.claude/skills/lib/cleanup-verify.sh
 ```
 
-All three must be clean before the cleanup is considered done. Prettier failures in CI are a separate check from ESLint (`lint:prettier` Turbo task) and will not be caught by `pnpm lint` alone.
+All three must pass (the script exits non-zero otherwise). On a failure, read the noted `/tmp/cleanup-ui-*.txt` log, fix, and re-run. Prettier failures in CI are a separate check from ESLint (`lint:prettier` Turbo task) and will not be caught by `pnpm lint` alone.
 
 ## Step 7: Update Repo Learnings
 
-After cleanup, capture anything non-obvious that was encountered. Read the existing learnings:
+After cleanup, capture anything non-obvious that was encountered. Resolve context (sets `$LEARNINGS_DIR`, `$SRC`, etc.) with the shared helper:
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
+source ~/.claude/skills/lib/skill-env.sh
 ```
 
 **`gotchas.md` — add if:**
@@ -211,10 +164,8 @@ Files modified: {list}
 ```
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-TS=$(date +%Y%m%d-%H%M%S)-$$
-mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
+source ~/.claude/skills/lib/skill-env.sh
+echo "$OUT/cleanup-ui-report-$TS.md"   # ← write the report to this exact path
 ```
 
-Write this report to `~/.claude/skill-output/$REPO/$BRANCH/cleanup-ui-report-$TS.md`.
+Write this report to the path echoed above.

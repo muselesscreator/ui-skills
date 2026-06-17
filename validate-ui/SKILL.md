@@ -39,8 +39,9 @@ Extract:
 ## Step 2: Get the Implementation
 
 ```bash
+source ~/.claude/skills/lib/skill-env.sh   # sets BASE (default branch), OUT, TS
 # What changed on this branch
-git diff --name-only $(git merge-base HEAD main)..HEAD
+git diff --name-only "$(git merge-base HEAD "$BASE")"..HEAD
 ```
 
 Read the changed files. Understand what was actually built.
@@ -106,10 +107,8 @@ Are the required tests present?
 ```
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-TS=$(date +%Y%m%d-%H%M%S)-$$
-mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
+source ~/.claude/skills/lib/skill-env.sh
+echo "$OUT/validation-report-$TS.md"   # ← write the report to this exact path
 ```
 
-Write this report to `~/.claude/skill-output/$REPO/$BRANCH/validation-report-$TS.md` so the next agent can read the verdict and act on gaps or unrequested changes.
+Write this report to the path echoed above so the next agent can read the verdict and act on gaps or unrequested changes.

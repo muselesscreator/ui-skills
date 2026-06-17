@@ -22,14 +22,10 @@ confidence_threshold: 75
 ## Step 1: Load Context
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
+source ~/.claude/skills/lib/skill-env.sh   # sets REPO, BRANCH, OUT, SRC, LEARNINGS_DIR
 ```
 
-Load learnings. Source depends on the repo: a repo with a `./wiki/` (work repo) keeps canonical knowledge in the wiki (QMD `wiki` collection); a repo with none (OSS checkout) uses flat files under `~/.claude/repo-learnings/$REPO/`.
-
-```bash
-[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
-```
+Load learnings. `$SRC` says where: a repo with a `./wiki/` (work repo) keeps canonical knowledge in the wiki (QMD `wiki` collection) → `$SRC=wiki`; a repo with none (OSS checkout) uses flat files under `$LEARNINGS_DIR` → `$SRC=flat`.
 
 **If SRC=wiki** — query QMD, scoped to `collections: ["wiki"]` with an `intent`, for reference implementations, gotchas/conventions, and file placement; then read the top hits with `_get`/`_multi_get`. If a plan file is in use, add a sub-query per pattern in its "Patterns to Follow" section.
 
@@ -102,13 +98,11 @@ Next steps:
 ```
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-TS=$(date +%Y%m%d-%H%M%S)-$$
-mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
+source ~/.claude/skills/lib/skill-env.sh
+echo "$OUT/impl-report-$TS.md"   # ← write the report to this exact path
 ```
 
-Write this report to `~/.claude/skill-output/$REPO/$BRANCH/impl-report-$TS.md` so the next agent can read what was built, what tests are needed, and what to run next.
+Write this report to the path echoed above so the next agent can read what was built, what tests are needed, and what to run next.
 
 ## Step 5: Update Repo Learnings
 

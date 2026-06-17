@@ -28,10 +28,7 @@ This skill owns the **planning judgment**: which files the change actually touch
 ## Step 1: Load the Task-Context Artifact
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
-BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-OUT=~/.claude/skill-output/$REPO/$BRANCH
+source ~/.claude/skills/lib/skill-env.sh   # sets REPO, BRANCH, OUT, SRC, …
 ANALYSIS=$(ls -t "$OUT"/analysis-*.md 2>/dev/null | head -1)
 ```
 
@@ -48,32 +45,27 @@ Now do the discovery the analysis deliberately left open — **which files this 
 
 ## Step 3: Read Existing Tests for Affected Files
 
-**Unit tests:** For each file identified in Step 2 as being modified, find and read its co-located test file(s):
+Pass the files identified in Step 2 (the ones this change will create or modify) to the affected-test finder — it locates co-located unit tests and the e2e specs that reference each file's name:
 
 ```bash
-# Find test files co-located with or adjacent to affected source files
-# e.g. Component.tsx → Component.test.tsx, Component.spec.tsx, __tests__/Component.tsx
+~/.claude/skills/lib/find-affected-tests.sh apps/app/src/Foo.tsx packages/ui/src/Bar.ts
+# (substitute the actual planned file paths)
 ```
 
-For each unit test file found:
+It prints `DIRECT_UNIT` / `INDIRECT_UNIT` (existing unit test files for those sources) and `DIRECT_E2E` / `INDIRECT_E2E` (specs that exercise them).
+
+**Unit tests:** For each unit test file it reports, read it and:
 - Note what is currently tested (happy path, edge cases, mocked dependencies)
 - Identify tests that will break due to the planned changes (changed props, renamed exports, new required deps)
 - Identify tests that will need to be extended to cover new behavior
 - Note any mocks or fixtures that reference things being changed
 
-If no unit test files exist for a modified file, flag it:
+If a modified file has no unit test reported, flag it:
 ```
 ⚠ No unit tests found for {file} — new tests will need to be written from scratch.
 ```
 
-**E2E tests:** Scan existing E2E specs for flows that exercise the affected feature area — even if those spec files are not being modified:
-
-```bash
-# Find specs that reference the feature area, affected component names, or route paths
-grep -rl "{feature-name}\|{ComponentName}\|{route-path}" packages/e2e/tests/specs/ 2>/dev/null
-```
-
-For each E2E spec found that hits the affected area:
+**E2E tests:** For each `INDIRECT_E2E`/`DIRECT_E2E` spec it reports that hits the affected area:
 - Read the spec and its associated page object
 - Identify which flows would exercise the changed component or behavior
 - Determine if the change would break any existing flow (selector changes, new required interactions, changed page structure)
@@ -143,18 +135,17 @@ Keep the plan concrete and short. Reference specific file paths wherever possibl
 ## Step 5: Write Output File
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-TS=$(date +%Y%m%d-%H%M%S)-$$
-mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
+source ~/.claude/skills/lib/skill-env.sh
+echo "$OUT/plan-$TS.md"   # ← write the plan to this exact path
 ```
 
-Write the full implementation plan produced in Step 4 to `~/.claude/skill-output/$REPO/$BRANCH/plan-$TS.md`. This file is read by `/impl-ui` when invoked with `use plan` — it picks up the most recent `plan-*.md` in the branch directory.
+Write the full implementation plan produced in Step 4 to the path echoed above. This file is read by `/impl-ui` when invoked with `use plan` — it picks up the most recent `plan-*.md` in the branch directory.
 
-Use the Write tool when it's available. **If you are running without a Write tool** (e.g. spawned as the read-only `Plan` agent type by `/orch-ui`), persist the same content with a quoted Bash heredoc instead — the quoted delimiter prevents `$`/backtick expansion of the plan body:
+Use the Write tool when it's available. **If you are running without a Write tool** (e.g. spawned as the read-only `Plan` agent type by `/orch-ui`), persist the same content with a quoted Bash heredoc instead — the quoted delimiter prevents `$`/backtick expansion of the plan body (source in the same block so `$OUT`/`$TS` are set):
 
 ```bash
-cat > ~/.claude/skill-output/$REPO/$BRANCH/plan-$TS.md <<'PLAN_EOF'
+source ~/.claude/skills/lib/skill-env.sh
+cat > "$OUT/plan-$TS.md" <<'PLAN_EOF'
 <full implementation plan markdown>
 PLAN_EOF
 ```
