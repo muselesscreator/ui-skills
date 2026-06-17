@@ -25,6 +25,8 @@ confidence_threshold: 75
 
 This skill owns the **planning judgment**: which files the change actually touches, the approach, the patterns to follow, the test impact, and the open questions. The fixed facts around the task — learnings, in-flight branch state, tooling constraints, task classification, user-named files — are gathered upstream by `/analyze-task` and consumed in Step 1. This skill does not re-derive them; it reasons over them and discovers the rest.
 
+**Out of scope — presentation-layer decisions.** Semantic element selection (`div` vs `span` vs `button` vs list/landmark elements), the CSS approach, and `className`/token composition are **not** planning judgments — they are deferred to `/impl-ui`'s presentation pass. The plan may *name* the design-system or styling pattern to follow as a reference (so impl knows which convention applies), but it does **not** resolve element-level markup or styling. If a presentation choice genuinely blocks the structure (e.g. a layout primitive that dictates the component tree), raise it as an Open Question rather than deciding it here.
+
 ## Step 1: Load the Task-Context Artifact
 
 ```bash
@@ -98,6 +100,7 @@ Output a structured plan:
 ### Patterns to Follow
 - [specific pattern from learnings, with reference file]
 - [specific pattern from learnings, with reference file]
+- [the design-system / styling pattern that applies, named with its reference file — so impl's presentation pass knows the convention. Do NOT spell out element-level markup or class composition here; that is impl-ui's call.]
 
 ### Gotchas to Avoid
 - [specific gotcha relevant to this task]

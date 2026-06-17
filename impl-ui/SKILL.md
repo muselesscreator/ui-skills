@@ -1,6 +1,6 @@
 ---
 name: impl-ui
-description: Implements a UI feature or change. Loads repo learnings and any existing plan, implements the change checking standards inline, then triggers test writing. Use when building a new UI feature, modifying an existing component, or executing a /plan-ui output.
+description: Implements a UI feature or change. Loads repo learnings and any existing plan, implements the change checking standards inline, delegates the presentation layer (semantic markup, CSS, class composition) to a dedicated sonnet subagent, then triggers test writing. Use when building a new UI feature, modifying an existing component, or executing a /plan-ui output.
 version: 1.0.0
 triggers:
   explicit:
@@ -53,6 +53,34 @@ Do not deviate from established patterns without flagging it:
 Reason: [why this case is different]
 Proceeding? [yes/no — ask if non-obvious]
 ```
+
+## Step 3.5: Presentation-Layer Pass (delegated to a lower tier)
+
+Step 3 builds the structure, data layer, and component logic. The **presentation layer** — semantic element choice (`div` vs `span` vs `button` vs list/landmark elements), the CSS/styling approach, and `className`/token composition — is standard implementation work that doesn't need the architectural-reasoning tier. Delegate it to a dedicated subagent so heavy reasoning stays on structure, not on `div`-vs-`span`.
+
+**Spawn one subagent (`model: sonnet`)** pointed at the component files written in Step 3. The Task/Agent tool's `model` is the lever here (effort is session-level — see `~/.claude/skills/AUTHORING.md`). When this skill itself runs on `sonnet` (e.g. the orch-ui feature-cycle `impl` step), this is a same-tier split — its value is then **context isolation**, not a tier drop; the tier drop applies when impl runs on a higher tier (e.g. a direct `/impl-ui` opus session). Give it, in the prompt:
+- The component files to refine (paths from Step 3).
+- The repo's presentation conventions from the learnings loaded in Step 1 — the established CSS/utility/token/styled pattern and the relevant design-system reference file. It must follow these, not invent its own.
+- Its scope, fenced tightly — it must not touch data hooks, state, prop contracts, or business logic; those are fixed by Step 3.
+
+Prompt skeleton:
+```
+You are refining the presentation layer of already-implemented components.
+Files: {paths}
+Follow these repo conventions exactly (do not invent patterns):
+  CSS / styling: {pattern + reference file from the loaded learnings}
+  Semantic markup / a11y: {element & accessibility conventions from learnings}
+Edit ONLY:
+  - semantic element choice (div/span/button/ul/nav/… — prefer the most semantic, accessible element)
+  - styling via the established pattern above
+  - className / design-token composition
+Do NOT change: data hooks, state, prop contracts, business logic, file structure.
+Report the files you edited and any element/styling choice that was non-obvious.
+```
+
+Why sonnet: per the model-tiering rubric in `AUTHORING.md`, presentation markup and styling are standard implementation work — sonnet, not the opus tier reserved for architecture/correctness. Keep it at sonnet rather than haiku because **accessibility semantics** (landmarks, button-vs-div, ARIA) carry real judgment; the conventions you pass in must still carry any a11y rules, and `/pr-review-ui`'s accessibility specialist is the downstream backstop.
+
+**If no Agent tool is available** (impl-ui spawned under a restricted agent type that can't fan out): skip the delegation and fold the presentation work into Step 3 inline — note in the Step 4 report that it ran inline rather than delegated.
 
 ## Step 4: Post-Implementation Check
 

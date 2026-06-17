@@ -20,7 +20,7 @@ steps:
     args: "use plan"
     model: sonnet
     stop_on_fail: true
-    note: Picks up the latest plan and implements it. sonnet — standard build.
+    note: Picks up the latest plan and implements it. sonnet — standard build; internally delegates the presentation-layer pass (semantic markup, CSS, class composition) to a sonnet subagent — same-tier here, so it buys context isolation rather than a tier drop (the drop applies on a direct opus /impl-ui). Default agent type (needs Edit/Write, and the Agent tool to fan out the presentation pass).
   - id: validate
     skill: validate-ui
     args: "$TASK"
