@@ -1,6 +1,6 @@
 ---
 name: eli-feature-cycle
-description: Analyze → plan → implement → validate → cleanup → commit → capture learnings → retro, for a UI feature or ticket in ELI repos. Each step runs in its own isolated subagent; the retro analyzes the run it just finished and proposes skill improvements.
+description: Analyze → plan → implement → validate → cleanup → commit → self-review → capture learnings → retro, for a UI feature or ticket in ELI repos. Each step runs in its own isolated subagent (except the interactive self-review step); the retro analyzes the run it just finished and proposes skill improvements.
 steps:
   - id: analyze
     skill: analyze-task
@@ -43,6 +43,12 @@ steps:
     model: haiku
     stop_on_fail: true
     note: Stage + commit (no push). Message generated from the diff. haiku — mechanical.
+  - id: self-review
+    skill: pr-review-ui
+    args: ""
+    interactive: true
+    stop_on_fail: false
+    note: Runs in the main session, not isolated — no existing skill pushes or opens a PR, so this step does that first, then hands off. Before invoking pr-review-ui, push the branch and `gh pr create --draft`, but only after an explicit human confirmation — per CLAUDE.md, opening a PR always requires an explicit yes, never an automatic step. If the human declines or doesn't confirm, skip the rest of this step (no PR to review) and continue to the wiki steps. Once the PR exists, invoke pr-review-ui (Skill tool) against it — it checks out the PR via `gh pr checkout` — using its own internal per-lens model tiers. stop_on_fail false — advisory: surfaces findings on the PR for the human and any later /pr-review pass to act on, does not block or undo committed work.
   - id: braindump
     skill: wiki-braindump
     args: ""
@@ -74,10 +80,18 @@ isolated in its own subagent; results pass between steps through
 `~/.claude/skill-output/$REPO/$BRANCH/`, which the skills read and write
 themselves.
 
+After committing, `self-review` runs in the main session (interactive, since no
+existing skill pushes or opens a PR): it pushes and opens a draft PR — gated on
+an explicit human confirmation before anything is pushed or made externally
+visible — then invokes `pr-review-ui` against it so UI-specific feedback
+surfaces before a human or CI reviewer sees the PR. `self-review` is
+`stop_on_fail: false`: it surfaces findings, it doesn't block or undo committed
+work.
+
 This flow adds the repo-local, interactive `wiki-braindump` and isolated
-`wiki-ingest` steps after the standard feature cycle commits. Repos without
-those skills skip the corresponding steps automatically. Both steps use
-`stop_on_fail: false`, so a wiki problem does not undo committed work.
+`wiki-ingest` steps after that. Repos without those skills skip the
+corresponding steps automatically. Both steps use `stop_on_fail: false`, so a
+wiki problem does not undo committed work.
 
 `retro` then closes the cycle by analyzing it — cost and tier fit, steps that
 retried or failed to converge, contract violations, environmental failures, open

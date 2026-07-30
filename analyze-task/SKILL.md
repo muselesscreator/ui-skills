@@ -1,6 +1,6 @@
 ---
 name: analyze-task
-description: Pre-planning fact-gathering for UI work. Resolves the fixed, task-independent context — repo learnings, in-flight branch state, tooling constraints, task classification, and the files the user explicitly named — and distills it into a single bounded "task context" artifact consumed downstream by /plan-ui, /impl-ui, /validate-ui, and /pr-review-ui so they stop re-deriving the same facts. Use before planning, or whenever you want the constraints around a task gathered without committing to an approach.
+description: Pre-planning fact-gathering for UI work. Gathers repo learnings, branch state, tooling constraints, task classification, and user-named files into one bounded "task context" artifact consumed by /plan-ui, /impl-ui, /validate-ui, and /pr-review-ui. Use before planning, or to gather a task's constraints without committing to an approach.
 version: 1.1.0
 triggers:
   explicit:

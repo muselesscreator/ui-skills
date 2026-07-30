@@ -1,6 +1,6 @@
 ---
 name: analyze-cycle
-description: Post-mortem for a completed work cycle. Reads the cycle's step ledger, artifacts, real per-step cost, step transcripts, and the branch's un-connected fix-sessions — the Claude sessions that ran on the branch outside the cycle, which are the clearest evidence of what the cycle failed to deliver — then proposes concrete, evidence-backed edits to the skills and cycle definition that caused each problem. Proposes by default; applies only when told to. Use after a cycle finishes, when a cycle cost or looped more than it should have, or when you keep hand-fixing the same thing after every run.
+description: Post-mortem for a completed work cycle. Reads the step ledger, artifacts, per-step cost, transcripts, and the branch's out-of-cycle fix-sessions, then proposes evidence-backed edits to the skills and cycle definition that caused each problem. Proposes by default; applies only when told to. Use after a cycle finishes, when one cost or looped too much, or when you keep hand-fixing the same thing after every run.
 version: 1.0.0
 triggers:
   explicit:

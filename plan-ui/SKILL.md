@@ -114,6 +114,7 @@ Output a structured plan:
 
 ### Gotchas to Avoid
 - [specific gotcha relevant to this task]
+- If this plan adds or touches a timing/lifecycle edge that is already tracked elsewhere (an existing timer, latch, or hook), name the single owner explicitly, or raise it as an Open Question instead of adding a parallel tracker.
 
 ### Tooling Constraints
 **TypeScript:** [strict flags that affect this implementation — e.g., "strictNullChecks: all optional props need explicit undefined handling"]
@@ -224,6 +225,7 @@ resolution:
 
 ## Options
 {lettered options per AUTHORING.md's Interaction contract — A) B) C) …, recommendation first, final ―) none of these — add context}
+{For any option that trades off against a prerequisite this memo's own Context names as missing (e.g. an unmeasured value, an untested assumption): add "Risk if chosen without it: {one line}" under that option, so resolving it without meeting the prerequisite requires engaging with the tradeoff, not just picking a letter.}
 MEMO_EOF
 ```
 

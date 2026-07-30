@@ -1,6 +1,6 @@
 ---
 name: orch-ui
-description: Orchestrates a multi-step UI work cycle. On invocation it selects the cycle-type (e.g. feature-cycle) — guessing from your message if one is given — CONFIRMS the choice with you, then runs each step in its own isolated subagent, handing off through files. The thin coordinating layer over plan/impl/validate/cleanup/commit/wiki skills so you don't manually clear and re-trigger each step. Use when the user asks to run a UI cycle, orchestrate a feature, or types /orch-ui.
+description: Orchestrates a multi-step UI work cycle. Selects the cycle-type (e.g. feature-cycle), CONFIRMS it with you, then runs each step in its own isolated subagent, handing off through files — the coordinating layer over plan/impl/validate/cleanup/commit/wiki skills. Use when asked to run a UI cycle, orchestrate a feature, or on /orch-ui.
 version: 1.0.0
 triggers:
   explicit:
