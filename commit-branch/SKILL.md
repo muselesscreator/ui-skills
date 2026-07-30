@@ -13,13 +13,10 @@ Commit-only. No push, no PR.
 ## Step 1: Context
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///; s/\.git//')
-[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
-BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-OUT=~/.claude/skill-output/$REPO/$BRANCH
-mkdir -p "$OUT"
-TS=$(date +%Y%m%d-%H%M%S)
+source ~/.claude/skills/lib/skill-env.sh   # sets REPO, BRANCH, BASE, OUT (mkdir -p'd), TS
 ```
+
+Never reassign `OUT` afterwards. A cycle runner may point `$OUT` at the cycle's own artifacts dir, and overwriting it drops the commit report somewhere the rest of the cycle won't look.
 
 ## Step 2: Inspect what will be committed
 

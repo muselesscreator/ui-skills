@@ -53,7 +53,13 @@ steps removes both opus passes and ~4 subagents.
 - The result needs a behavioral gate (does it actually do what was asked?) beyond
   lint/type/tests.
 - You want the wiki-capture (`braindump` / `ingest`) steps — those live in
-  feature-cycle.
+  `eli-feature-cycle`.
+
+There is deliberately **no `retro` step** here either. The feature cycles end with
+one (`analyze-cycle`, sonnet, ~$1–3), but on a cycle this cheap the retro would be
+a large fraction of total spend while having the least to analyze — three
+mechanical steps with no plan, no gate, and little to tier wrong. Run
+`/analyze-cycle` by hand if a `simple-task` run does surprise you.
 
 `impl-ui` still loads repo learnings and will pick up an existing `plan-*.md` or
 `handoff-latest.md` on its own, so `simple-task` benefits from prior context

@@ -1,0 +1,331 @@
+<meta charset="utf-8">
+<title>
+{{TITLE}}
+</title>
+<style>
+  :root {
+    --bg: #F4F6F2;
+    --surface: #FCFDFB;
+    --ink: #242B21;
+    --muted: #68715F;
+    --accent: #37624C;
+    --line: #DDE2D6;
+    --code-bg: #ECEFE7;
+    --code-ink: #3A4434;
+    --warn: #7C5E27;
+    --warn-bg: #F6EEDC;
+    --warn-line: #E3D4AF;
+    --chip-bg: #E7EBE1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161A15;
+      --surface: #1D221C;
+      --ink: #DCE2D4;
+      --muted: #939C88;
+      --accent: #8CC0A4;
+      --line: #2C332A;
+      --code-bg: #232A22;
+      --code-ink: #C6D0BC;
+      --warn: #D9B871;
+      --warn-bg: #282214;
+      --warn-line: #4A3F26;
+      --chip-bg: #252C24;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #F4F6F2;
+    --surface: #FCFDFB;
+    --ink: #242B21;
+    --muted: #68715F;
+    --accent: #37624C;
+    --line: #DDE2D6;
+    --code-bg: #ECEFE7;
+    --code-ink: #3A4434;
+    --warn: #7C5E27;
+    --warn-bg: #F6EEDC;
+    --warn-line: #E3D4AF;
+    --chip-bg: #E7EBE1;
+  }
+  :root[data-theme="dark"] {
+    --bg: #161A15;
+    --surface: #1D221C;
+    --ink: #DCE2D4;
+    --muted: #939C88;
+    --accent: #8CC0A4;
+    --line: #2C332A;
+    --code-bg: #232A22;
+    --code-ink: #C6D0BC;
+    --warn: #D9B871;
+    --warn-bg: #282214;
+    --warn-line: #4A3F26;
+    --chip-bg: #252C24;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap {
+    max-width: 76ch;
+    margin: 0 auto;
+    padding: 2.75rem 1.5rem 5rem;
+  }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  h1, h2, h3, h4 {
+    font-family: "Charter", "Iowan Old Style", "Palatino", Georgia, serif;
+    text-wrap: balance;
+    line-height: 1.25;
+  }
+  .eyebrow {
+    margin: 0 0 .5rem;
+    font: 600 .72rem/1 system-ui, sans-serif;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    margin: 0 0 .9rem;
+    font-size: 1.9rem;
+    font-weight: 600;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin: 0;
+  }
+  .chip {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .74rem;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .2rem .55rem;
+  }
+  header {
+    padding-bottom: 1.6rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  main h2 {
+    font-size: 1.4rem;
+    margin: 2.6rem 0 .8rem;
+  }
+  .sec { margin-top: 2.3rem; }
+  .sec h3 {
+    font-size: 1.22rem;
+    font-weight: 600;
+    margin: 0 0 .7rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--line);
+  }
+  h4 {
+    font-size: 1.02rem;
+    margin: 1.4rem 0 .4rem;
+  }
+  p { margin: .55rem 0; }
+  p.label {
+    margin: 1.15rem 0 .3rem;
+    font-weight: 600;
+  }
+  ul, ol {
+    margin: .45rem 0;
+    padding-left: 1.35rem;
+  }
+  li { margin: .32rem 0; }
+  li::marker { color: var(--muted); }
+
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .875em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 4px;
+    padding: .1em .35em;
+    overflow-wrap: anywhere;
+  }
+  pre.block {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: .85rem 1rem;
+    overflow-x: auto;
+    line-height: 1.5;
+  }
+  pre.block code {
+    background: none;
+    padding: 0;
+    font-size: .84rem;
+  }
+
+  p.warn {
+    color: var(--warn);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-line);
+    border-radius: 6px;
+    padding: .55rem .8rem;
+  }
+  .sec.questions {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-line);
+    border-radius: 8px;
+    padding: 1.1rem 1.3rem;
+  }
+  .sec.questions h3 {
+    border-bottom-color: var(--warn-line);
+    color: var(--warn);
+  }
+  .sec.questions.clear {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .sec.questions.clear h3 {
+    color: var(--accent);
+    border-bottom-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 2rem 0;
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Implementation plan</p>
+    <h1>
+{{TITLE}}
+    </h1>
+    <p class="meta">
+      <span class="chip">
+{{REPO}}
+      </span>
+      <span class="chip">
+{{BRANCH}}
+      </span>
+      <span class="chip">
+{{DATE}}
+      </span>
+    </p>
+  </header>
+  <main id="plan"></main>
+</div>
+
+<pre id="plan-src" hidden>
+{{PLAN_MD}}
+</pre>
+
+<script>
+function mdToHtml(src) {
+  var esc = function (s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  var inline = function (s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>');
+  };
+  var renderList = function (items, depth) {
+    var tag = items[0].ordered ? 'ol' : 'ul';
+    var html = '<' + tag + '>';
+    var k = 0;
+    while (k < items.length) {
+      var it = items[k];
+      var li = '<li>' + inline(it.text);
+      k++;
+      var kids = [];
+      while (k < items.length && items[k].depth > depth) kids.push(items[k++]);
+      if (kids.length) li += renderList(kids, kids[0].depth);
+      html += li + '</li>';
+    }
+    return html + '</' + tag + '>';
+  };
+
+  var lines = src.replace(/\r/g, '').split('\n');
+  var out = [];
+  var para = [];
+  var i = 0;
+  var inSection = false;
+  var firstH2Skipped = false;
+
+  var flushPara = function () {
+    if (!para.length) return;
+    var text = para.join(' ').trim();
+    if (!text) { para = []; return; }
+    var cls = '';
+    if (/^⚠/.test(text)) cls = ' class="warn"';
+    else if (/^\*\*[^*]+\*\*:?$/.test(text)) cls = ' class="label"';
+    out.push('<p' + cls + '>' + inline(text) + '</p>');
+    para = [];
+  };
+  var openSection = function (title) {
+    flushPara();
+    if (inSection) out.push('</section>');
+    var slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    out.push('<section class="sec" data-sec="' + slug + '"><h3>' + inline(title) + '</h3>');
+    inSection = true;
+  };
+
+  while (i < lines.length) {
+    var line = lines[i];
+    var m;
+    if (/^```/.test(line)) {
+      flushPara();
+      var buf = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
+      i++;
+      out.push('<pre class="block"><code>' + esc(buf.join('\n')) + '</code></pre>');
+      continue;
+    }
+    if ((m = line.match(/^####\s+(.*)/))) { flushPara(); out.push('<h4>' + inline(m[1]) + '</h4>'); i++; continue; }
+    if ((m = line.match(/^###\s+(.*)/))) { openSection(m[1]); i++; continue; }
+    if ((m = line.match(/^##\s+(.*)/))) {
+      i++;
+      if (!firstH2Skipped) { firstH2Skipped = true; continue; }
+      flushPara();
+      out.push('<h2>' + inline(m[1]) + '</h2>');
+      continue;
+    }
+    if (/^\s*(?:[-*]|\d+\.)\s+/.test(line)) {
+      flushPara();
+      var items = [];
+      while (i < lines.length && /^\s*(?:[-*]|\d+\.)\s+/.test(lines[i])) {
+        var lm = lines[i].match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
+        items.push({ depth: lm[1].length, ordered: /\d/.test(lm[2]), text: lm[3] });
+        i++;
+      }
+      out.push(renderList(items, items[0].depth));
+      continue;
+    }
+    if (/^---+\s*$/.test(line)) { flushPara(); out.push('<hr>'); i++; continue; }
+    if (/^\s*$/.test(line)) { flushPara(); i++; continue; }
+    if (/^(\*\*|⚠)/.test(line)) flushPara();
+    para.push(line);
+    i++;
+  }
+  flushPara();
+  if (inSection) out.push('</section>');
+  return out.join('\n');
+}
+
+/* glue */
+(function () {
+  var srcEl = document.getElementById('plan-src');
+  if (!srcEl) return;
+  var main = document.getElementById('plan');
+  main.innerHTML = mdToHtml(srcEl.textContent);
+  var oq = main.querySelector('[data-sec^="open-questions"]');
+  if (oq) {
+    oq.classList.add('questions');
+    if (/none\s*[—-]\s*ready/i.test(oq.textContent)) oq.classList.add('clear');
+  }
+})();
+</script>

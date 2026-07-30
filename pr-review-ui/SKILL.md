@@ -1,7 +1,7 @@
 ---
 name: pr-review-ui
 description: UI-focused PR review. Parallel specialist sub-agents cover design-system usage, accessibility, UI state and data-fetching, render performance, client-side security, and UI test coverage. Bails out early if the PR has no UI files. Loads repo learnings once, scoped to UI topics, and writes them to a file that sub-agents reference by path.
-version: 1.2.0
+version: 1.4.0
 triggers:
   explicit:
     - pr review ui
@@ -87,10 +87,10 @@ If working tree is dirty, ask before checkout. There is no diff-only fallback.
 ## Step 5: Load UI Learnings
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
-[ -d "$(git rev-parse --show-toplevel 2>/dev/null)/wiki" ] && SRC=wiki || SRC=flat
+source ~/.claude/skills/lib/skill-env.sh   # sets REPO, BRANCH (post-checkout = PR branch), OUT, SRC
 ```
+
+**Reuse the branch's task-context artifact first.** If `$OUT/analysis-latest.md` exists (an `/analyze-task` run from when this branch was built), read it — its **Relevant Learnings**, **Tooling Constraints**, and **Gotchas** seed the Step 6 conventions file directly, and are already distilled. Then query below **only** for UI topics the artifact doesn't cover (a11y is rarely in a task analysis; add category-driven queries from the Step 3 file map as needed). If no artifact exists, load everything fresh:
 
 **If SRC=wiki (work repo — canonical):** query QMD scoped to `collections: ["wiki"]` with an `intent`. Always pull UI gotchas/conventions and component/ui-system/design-system patterns; add keyword-driven sub-queries from the Step 3 file-category map (data-fetching/state for ui-hook, theming/css for ui-style, ui-testing for ui-test, storybook for ui-story) plus an a11y/accessibility query. Read top `qmd://wiki/...` hits.
 
@@ -101,6 +101,18 @@ REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
 ⚠ No UI learnings for {repo}. Review uses generic UI standards. Run /learn-repo to capture this repo's UI conventions.
 ```
 Proceed.
+
+**Load per-repo review heuristics** — mechanism only; the content is authored by the target repo, never by this skill (AUTHORING.md § Decision memos & per-repo review heuristics). Check, in order, and stop at the first that exists:
+
+1. Repo-local: `.claude/review-heuristics.md` at the repo root.
+2. Wiki note via QMD: if `SRC=wiki`, query `collections: ["wiki"]` for a `review-heuristics`/`review heuristics` intent; read the top hit if it reads as a heuristics doc.
+3. Flat-file fallback: `~/.claude/repo-learnings/$REPO/review-heuristics.md`.
+
+If none exist:
+```
+ℹ No repo review-heuristics found — using generic lens standards only.
+```
+Proceed (mirrors the "no UI learnings" fallback shape above — a missing heuristics file is expected, not an error).
 
 ## Step 6: Write UI Conventions File
 
@@ -140,6 +152,10 @@ Distill to **≤80 lines** at `~/.claude/skill-output/$REPO/$BRANCH/pr-review-ui
 
 Sections with no loaded content: write `(none captured)` so reviewers know it was checked.
 
+**Layer in the per-repo review heuristics, if one was loaded in Step 5.** The heuristics file is free-form markdown owned by the target repo — never authored here. If it has a section whose heading matches a lens name (`design-system`, `a11y`, `ui-state`, `ui-perf`, `ui-security`, `ui-testing`, `ui-docs`; case-insensitive), append that section's content verbatim under the matching conventions-file section above, labeled `(repo heuristics)`. Sections that don't match any known lens are dropped silently — they're for a different consumer.
+
+If the heuristics file has a **Cross-cutting** section, do not fold it into any per-lens section — hold it aside for Step 8, where it broadcasts into every agent's prompt rather than one lens's slice. If no heuristics file was loaded, or it was loaded but has no Cross-cutting section, still broadcast the suite's own default: fix issues at the source (the input, config, or generator), not in the generated or derived artifact.
+
 This file is the **single source** sub-agents reference. Do not embed elsewhere.
 
 ## Step 7: Parse Existing Comments
@@ -155,6 +171,8 @@ Review PR #{N} ({title}) in {OWNER}/{REPO_NAME}. Branch checked out — read fil
 
 UI conventions: ~/.claude/skill-output/{REPO}/{BRANCH}/pr-review-ui-conventions.md
 Read only sections relevant to your focus.
+
+Cross-cutting (applies to every lens): {the Cross-cutting content held aside in Step 6, or the default "fix at the source, not the generated artifact" rule if none was loaded}
 
 Files (your category only): {filtered list}
 

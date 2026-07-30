@@ -43,10 +43,8 @@ Target resolution rules — try in order, stop at first match:
 
 2. **"the plan" / "this plan" / "current plan"**:
    ```bash
-   REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-   [ -z "$REPO" ] && REPO=$(basename $(git rev-parse --show-toplevel 2>/dev/null) 2>/dev/null)
-   BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-   ls -t ~/.claude/skill-output/$REPO/$BRANCH/plan-*.md 2>/dev/null | head -1
+   source ~/.claude/skills/lib/skill-env.sh
+   ls -t "$OUT"/plan-*.md 2>/dev/null | head -1
    ```
    Read the most recent plan file. If none exists, report:
    ```

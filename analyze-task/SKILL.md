@@ -1,7 +1,7 @@
 ---
 name: analyze-task
-description: Pre-planning fact-gathering for UI work. Resolves the fixed, task-independent context — repo learnings, in-flight branch state, tooling constraints, task classification, and the files the user explicitly named — and distills it into a single bounded "task context" artifact. /plan-ui consumes it today; /impl-ui, /validate-ui, and /pr-review-ui can adopt it to stop re-deriving the same facts. Use before planning, or whenever you want the constraints around a task gathered without committing to an approach.
-version: 1.0.0
+description: Pre-planning fact-gathering for UI work. Resolves the fixed, task-independent context — repo learnings, in-flight branch state, tooling constraints, task classification, and the files the user explicitly named — and distills it into a single bounded "task context" artifact consumed downstream by /plan-ui, /impl-ui, /validate-ui, and /pr-review-ui so they stop re-deriving the same facts. Use before planning, or whenever you want the constraints around a task gathered without committing to an approach.
+version: 1.1.0
 triggers:
   explicit:
     - analyze task
@@ -28,12 +28,10 @@ Its product is a distilled, reusable artifact — not a dump of raw file content
 ## Step 1: Resolve context
 
 ```bash
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git//')
-[ -z "$REPO" ] && REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
-BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
-OUT=~/.claude/skill-output/$REPO/$BRANCH
-mkdir -p "$OUT"
+source ~/.claude/skills/lib/skill-env.sh   # sets REPO, BRANCH, BASE, OUT (mkdir -p'd), TS
 ```
+
+Never reassign `OUT` afterwards. A cycle runner may point `$OUT` at the cycle's own artifacts dir, and overwriting it drops this skill's artifact somewhere the rest of the cycle won't look.
 
 ## Step 1.5: Seed from a prior savepoint handoff (if present)
 
@@ -50,6 +48,12 @@ Treat it as a **seed, not ground truth** — it reflects state when written, whi
 
 If the handoff already covers the whole task (files + gotchas + decisions), keep Steps 2–5 to **confirming** its facts rather than rebuilding them — that's the point of seeding. Record the source in the artifact frontmatter (`seeded_from:` in Step 6). If no handoff exists, skip this step silently.
 
+**Also seed from resolved decision memos.** A prior `/plan-ui` or `/impl-ui` run on this branch may have already settled questions this task would otherwise re-raise:
+```bash
+~/.claude/skills/lib/decide.sh list resolved
+```
+Read each listed memo under `$OUT/decisions/` and its `## Resolution` block. Fold settled decisions into the artifact's **Notes for Planning** (Step 6) as already-answered, citing the memo id — this keeps `/plan-ui` from re-litigating them as fresh Open Questions. If no memos exist yet, skip silently.
+
 ## Step 2: Load and refresh repo learnings
 
 Load learnings. Source depends on the repo:
@@ -64,8 +68,6 @@ Load learnings. Source depends on the repo:
 git log --since="{last-analyzed}" --name-only --pretty=format: | sort -u | grep -v '^$' | grep -E "\.(ts|tsx|js|jsx)$" | wc -l
 ```
 If stale, call `/update-learnings` then re-read.
-
-If a `learnings-context-latest.md` already exists in `$OUT` (a prior `/load-learnings` run in this branch), read it instead of re-querying — it is already distilled.
 
 If neither source yields anything:
 ```

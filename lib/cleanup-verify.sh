@@ -6,13 +6,17 @@
 # check from ESLint and is not covered by `pnpm lint` — so it is verified
 # explicitly here.
 #
-# Uses the --filter flags from /tmp/cleanup-ui-filters.txt (written by
-# cleanup-scope.sh) to scope prettier to affected packages; falls back to
-# full-repo when absent. Full logs are saved under /tmp for diagnosis.
+# Uses the --filter flags from $OUT/cleanup-scope-filters.txt (written by
+# cleanup-scope.sh; $OUT is the repo+branch-scoped dir from skill-env.sh) to
+# scope prettier to affected packages; falls back to full-repo when absent.
+# Full logs are saved under $OUT for diagnosis — repo+branch scoped, so
+# concurrent runs in other worktrees don't clobber each other's logs.
 #
 # Exit: 0 if all three pass, 1 otherwise.
 
-FILTERS=$(cat /tmp/cleanup-ui-filters.txt 2>/dev/null)
+. "$(dirname "${BASH_SOURCE[0]}")/skill-env.sh"   # sets OUT (mkdir -p'd)
+
+FILTERS=$(cat "$OUT/cleanup-scope-filters.txt" 2>/dev/null)
 
 run() {
   local label="$1" log="$2"; shift 2
@@ -27,14 +31,18 @@ run() {
 
 rc=0
 echo "Final verification:"
-run "type-check" /tmp/cleanup-ui-typecheck.txt pnpm type-check || rc=1
-run "lint (eslint)" /tmp/cleanup-ui-lint.txt pnpm lint || rc=1
 
 if [ -n "$FILTERS" ]; then
   # shellcheck disable=SC2086
-  run "lint:prettier" /tmp/cleanup-ui-prettier.txt pnpm $FILTERS lint:prettier || rc=1
+  run "type-check" "$OUT/cleanup-verify-typecheck.txt" pnpm $FILTERS type-check || rc=1
+  # shellcheck disable=SC2086
+  run "lint (eslint)" "$OUT/cleanup-verify-lint.txt" pnpm $FILTERS lint || rc=1
+  # shellcheck disable=SC2086
+  run "lint:prettier" "$OUT/cleanup-verify-prettier.txt" pnpm $FILTERS lint:prettier || rc=1
 else
-  run "lint:prettier" /tmp/cleanup-ui-prettier.txt pnpm lint:prettier || rc=1
+  run "type-check" "$OUT/cleanup-verify-typecheck.txt" pnpm type-check || rc=1
+  run "lint (eslint)" "$OUT/cleanup-verify-lint.txt" pnpm lint || rc=1
+  run "lint:prettier" "$OUT/cleanup-verify-prettier.txt" pnpm lint:prettier || rc=1
 fi
 
 if [ "$rc" -eq 0 ]; then

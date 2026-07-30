@@ -11,14 +11,16 @@
 #   2. staged changes
 #   3. unstaged + untracked (excluding .claude/.cursor/thoughts/specs noise)
 #
-# Side effects (read by later cleanup-ui steps, surviving across shells):
-#   /tmp/cleanup-ui-changed.txt   changed files, one per line
-#   /tmp/cleanup-ui-filters.txt   pnpm --filter flags, space-separated (may be empty)
+# Side effects (read by later cleanup-ui steps, surviving across shells).
+# Written under $OUT — the repo+branch-scoped skill-output dir from skill-env.sh —
+# so concurrent runs in other worktrees/branches don't clobber each other the way
+# the old fixed /tmp/cleanup-ui-*.txt paths did:
+#   $OUT/cleanup-scope-changed.txt   changed files, one per line
+#   $OUT/cleanup-scope-filters.txt   pnpm --filter flags, space-separated (may be empty)
 #
 # Stdout: a human-readable summary (changed count, package list, filter flags).
 
-BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
-[ -z "$BASE" ] && BASE=main
+. "$(dirname "${BASH_SOURCE[0]}")/skill-env.sh"   # sets BASE, OUT (mkdir -p'd)
 
 CHANGED=$(git diff --name-only "$(git merge-base HEAD "$BASE")" HEAD 2>/dev/null)
 [ -z "$CHANGED" ] && CHANGED=$(git diff --name-only --cached)
@@ -31,7 +33,7 @@ if [ -n "$1" ]; then
   CHANGED=$(printf '%s\n' "$CHANGED" | grep -F "$1")
 fi
 CHANGED=$(printf '%s\n' "$CHANGED" | sed '/^$/d')
-printf '%s\n' "$CHANGED" > /tmp/cleanup-ui-changed.txt
+printf '%s\n' "$CHANGED" > "$OUT/cleanup-scope-changed.txt"
 
 # Affected package dirs: strip /src/... ; keep paths that have a package.json.
 pkg_dirs=$(printf '%s\n' "$CHANGED" | sed 's|/src/.*||' | sort -u)
@@ -55,9 +57,9 @@ while IFS= read -r d; do
   [ -n "$name" ] && { filters="$filters --filter $name"; resolved="$resolved  $d → $name"$'\n'; }
 done <<< "$pkg_dirs"
 filters=$(printf '%s' "$filters" | sed 's/^ *//')
-printf '%s' "$filters" > /tmp/cleanup-ui-filters.txt
+printf '%s' "$filters" > "$OUT/cleanup-scope-filters.txt"
 
-echo "Changed files: $(printf '%s\n' "$CHANGED" | grep -c . ) (→ /tmp/cleanup-ui-changed.txt)"
+echo "Changed files: $(printf '%s\n' "$CHANGED" | grep -c . ) (→ $OUT/cleanup-scope-changed.txt)"
 echo "Affected packages:"
 printf '%s' "${resolved:-  (none)
 }"

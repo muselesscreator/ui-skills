@@ -10,6 +10,7 @@
 #   OUT            skill-output dir for this repo+branch (created via mkdir -p)
 #   TS             timestamp-PID stamp for unique output filenames
 #   LEARNINGS_DIR  flat-file learnings dir for this repo
+#   DECISIONS_HOME decision-memo dir — always branch-scoped, never cycle-redirected
 #   SRC            "wiki" if the repo has ./wiki/, else "flat"
 #
 # Replaces the REPO=/BRANCH=/OUT=/TS=/mkdir boilerplate previously duplicated
@@ -24,12 +25,21 @@ BRANCH=$(git branch --show-current 2>/dev/null | sed 's/\//-/g')
 BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
 [ -z "$BASE" ] && BASE=main
 
-OUT=~/.claude/skill-output/$REPO/$BRANCH
+if [ -n "${DEVSCREEN_CYCLE_OUTPUT_DIR:-}" ]; then
+  OUT="$DEVSCREEN_CYCLE_OUTPUT_DIR"
+else
+  OUT=~/.claude/skill-output/$REPO/$BRANCH
+fi
 TS=$(date +%Y%m%d-%H%M%S)-$$
 LEARNINGS_DIR=~/.claude/repo-learnings/$REPO
+
+# Decision memos are branch-scoped and must NOT follow a cycle-dir redirect of $OUT:
+# ids are allocated by scanning this dir, so two locations means two memos sharing one id.
+DECISIONS_HOME=~/.claude/skill-output/$REPO/$BRANCH/decisions
+mkdir -p "$DECISIONS_HOME"
 
 if [ -n "$ROOT" ] && [ -d "$ROOT/wiki" ]; then SRC=wiki; else SRC=flat; fi
 
 mkdir -p "$OUT"
 
-export ROOT REPO BRANCH BASE OUT TS LEARNINGS_DIR SRC
+export ROOT REPO BRANCH BASE OUT TS LEARNINGS_DIR SRC DECISIONS_HOME

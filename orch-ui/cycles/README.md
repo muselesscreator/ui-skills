@@ -48,11 +48,19 @@ steps:
   subagent — for steps that need live back-and-forth (e.g. a voice braindump).
 - Set `stub: true` for steps whose skill isn't built yet; `/orch-ui` skips them.
 - Set `stop_on_fail: false` for non-gating steps that shouldn't halt the run.
+- **A step that analyzes its own cycle** (e.g. `retro` → `analyze-cycle`) must
+  never report `BLOCKED` — `orch-ui` Step 3e treats `BLOCKED` as a hard stop even
+  when `stop_on_fail: false`, so a self-analysis step raising a decision memo
+  would halt the cycle at its own finish line over a question nothing downstream
+  depends on. Such a step passes a mode flag in `args` (`"retro"`) that suppresses
+  the memo path in the skill, and pairs it with `stop_on_fail: false`.
 
 ## Cycle-types
 
-- **feature-cycle** — analyze → plan → impl → validate (gate) → cleanup → commit →
-  braindump (repo-local, interactive) → ingest (repo-local). The UI feature/ticket loop.
+- **feature-cycle** — analyze → plan → impl → validate (gate) → cleanup → commit
+  → retro. The standard UI feature/ticket loop, without wiki commands.
+- **eli-feature-cycle** — the standard feature cycle followed by braindump
+  (repo-local, interactive) → ingest (repo-local) → retro, for ELI repos.
 - **simple-task** — impl → cleanup → commit. The lightweight loop for a small,
   already-understood change (test tweak, copy/style fix, one- or two-file edit).
   No analyze/plan/validate, no opus steps. Falls back to feature-cycle when the

@@ -145,7 +145,7 @@ Identify 1-3 files or features that represent the cleanest, most idiomatic examp
 
 ## Step 7: Write Learnings
 
-Write flat markdown files to `~/.claude/repo-learnings/$REPO/`. Each file starts with a one-line `Last analyzed: {ISO-date}` and a short scope line. Keep them concise and synthesized — these feed `load-learnings` (distilled to ≤200 lines) and `synthesize-patterns` (cross-repo), so favor durable rules over verbatim code.
+Write flat markdown files to `~/.claude/repo-learnings/$REPO/`. Each file starts with a one-line `Last analyzed: {ISO-date}` and a short scope line. Keep them concise and synthesized — these feed `synthesize-patterns` (cross-repo), so favor durable rules over verbatim code.
 
 ```bash
 LD=~/.claude/repo-learnings/$REPO
