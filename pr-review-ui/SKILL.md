@@ -260,3 +260,15 @@ non_ui_files: {N}
 Plus the report from Step 9.
 
 Then ask: post comments / dig into a finding / done. If posting, show `gh` commands and confirm each — never auto-post.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. Run this BEFORE the ask
+# above resolves — a review whose findings were never posted is exactly the leak
+# a retro needs to see, so log it even when the human picks "done".
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append pr-review "PASS|FAIL|BLOCKED" "<report path just written, or ->" \
+  "<one sentence: verdict + blocking/should-fix/suggestion counts>" "<what still needs a decision or a fix, or ->" "-"
+```

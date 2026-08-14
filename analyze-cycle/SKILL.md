@@ -28,9 +28,9 @@ confidence_threshold: 80
 
 When invoked as a cycle's **own final step**, you are analyzing a cycle that is still running — your own step is part of it.
 
-**Never raise a decision memo, never report `BLOCKED`, never apply an edit.** A retro's proposals gate nothing downstream (there is no downstream — the work is already committed), and `BLOCKED` halts the cycle in `orch-ui` Step 3e regardless of `stop_on_fail`. Report `PASS` with the artifact path in `FOLLOWUP`. Skip Step 7's menu entirely.
+**Never raise a decision memo, never report `BLOCKED`, never apply an edit.** A retro's proposals gate nothing downstream — the work is already committed — and `BLOCKED` halts the cycle in `orch-ui` Step 3e regardless of `stop_on_fail`. Report `PASS` with the artifact path in `FOLLOWUP` and skip Step 7 entirely.
 
-**A live retro is not a degraded retro. Capture everything, now.** The leak record does not require a settled branch — it requires the right window, which `cycle-forensics.py` opens at **the end of the previous cycle on this branch** and holds open to *now*. At retro time, all of this is already on disk:
+**A live retro is not a degraded retro. Capture everything, now.** The leak record needs the right window, not a settled branch: `cycle-forensics.py` opens it at **the end of the previous cycle on this branch** and holds it to *now*. Already on disk:
 
 | Available at retro time | Attributed to |
 |---|---|
@@ -40,26 +40,24 @@ When invoked as a cycle's **own final step**, you are analyzing a cycle that is 
 | **Intra-cycle rework** — a file two different steps of this cycle both edited (a later step patching an earlier one) | this cycle |
 | **Uncommitted working tree** — often where the whole diff still lives mid-cycle | this cycle |
 
-So retros **compound**: each one closes the loop on its predecessor with complete evidence while capturing its own live signals. The single thing no retro can see is its *own* post-cycle leak — that work has not happened yet, and the next retro on this branch will report it. Never describe the leak analysis as unavailable or deferred, and never tell the human to come back later for it.
+Retros therefore **compound**: each closes the loop on its predecessor while capturing its own live signals. The only thing a retro can't see is its own post-cycle leak; the next one reports it. Never call the leak analysis unavailable or deferred.
 
 Two attribution rules, both hard:
 
-- **Never blame this cycle for `inter-cycle` evidence.** The forensics report labels every session and commit with `attributed_to`; carry that label into every finding. A proposal targeting the step that ran *before* this cycle is still valid and valuable — say which cycle the evidence came from.
-- **Read `active` sessions as present-tense.** A `🔴 STILL ACTIVE` session means the human is working around the cycle *right now*. That is the strongest signal available and belongs at the top of the report, not in a past-tense list.
+- **Never blame this cycle for `inter-cycle` evidence.** Carry `attributed_to` into every finding; a proposal targeting a step from the *previous* cycle is still valid — just say so.
+- **Read `active` sessions as present-tense.** `🔴 STILL ACTIVE` means the human is working around the cycle *right now* — the strongest signal there is, and it belongs at the top of the report.
 
 Everything else (Steps 1–6) runs unchanged.
 
-You are running a **post-mortem on one cycle** and turning what you find into proposed edits to the skills that ran it. The deliverable is a written proposal, not applied changes: you edit skills only after explicit approval (Step 7).
+You are running a **post-mortem on one cycle**, turning what you find into proposed edits to the skills that ran it. The deliverable is a written proposal; you edit skills only after explicit approval (Step 7).
 
-The central insight this skill is built on: **a cycle's real failures are recorded in the sessions that ran around it.** If the human had to open a fresh session on that branch to fix the loading bar, add the tests, or work the PR feedback, then some step of the cycle either didn't do its job or doesn't exist. Those sessions are the ground truth; the step ledger only tells you what the cycle *thought* happened.
-
-None of that requires waiting. The evidence window spans **the previous cycle's end to right now**, so every run captures the previous cycle's finished leak record plus its own live surroundings — including sessions still open. See **Retro mode** for the full inventory of what's readable at any moment.
+The insight this skill is built on: **a cycle's real failures are recorded in the sessions that ran around it.** If the human opened a fresh session on that branch to fix the loading bar, add the tests, or work the PR feedback, some step either didn't do its job or doesn't exist. Those sessions are ground truth; the step ledger only says what the cycle *thought* happened.
 
 ## Caps (fixed)
 
-- **6** investigations fanned out in Step 4. Triage picks the 6 highest-signal; the rest are listed as un-investigated, never silently dropped.
-- **8** proposals in the final artifact. Rank and cut, don't pad.
-- Both are hard. If the evidence clearly needs more, say so in the report and let the human re-run scoped to what you left out — don't self-authorize a bigger sweep.
+- **6** investigations fanned out in Step 4. Triage takes the 6 highest-signal; the rest are listed as un-investigated, never silently dropped.
+- **8** proposals in the artifact. Rank and cut, don't pad.
+- Both are hard. If the evidence needs more, say so and let the human re-run scoped to what you left out — never self-authorize a bigger sweep.
 
 ## Step 0: Resolve the cycle — then CONFIRM
 
@@ -68,7 +66,7 @@ source ~/.claude/skills/lib/skill-env.sh
 python3 ~/.claude/skills/lib/cycle-forensics.py list --limit 15
 ```
 
-Pick the target from `$ARGUMENTS`: an id prefix, a dir, a runlog path, or `latest`. If `$ARGUMENTS` names no cycle, take the most recent one **for the current repo/branch** if there is one, else the most recent overall.
+Take the target from `$ARGUMENTS` — an id prefix, a dir, a runlog path, or `latest`. If it names none, use the most recent cycle for the current repo/branch, else the most recent overall.
 
 **Confirm before spending anything**, and wait for the reply:
 
@@ -76,9 +74,9 @@ Pick the target from `$ARGUMENTS`: an id prefix, a dir, a runlog path, or `lates
 > 8 steps, 13 runs. I'll read the ledger, the artifacts, the step transcripts, and the branch's un-connected sessions, then propose skill edits.
 > Proceed? Or pick another cycle.
 
-Use AskUserQuestion when the choice is genuinely open (options = the listed cycles). If this skill is running **isolated** (no AskUserQuestion available) and `$ARGUMENTS` named a cycle unambiguously, take that as the confirmation and continue.
+Use AskUserQuestion when the choice is genuinely open (options = the listed cycles). Running **isolated** with a cycle named unambiguously in `$ARGUMENTS`, take that as the confirmation.
 
-**In retro mode**, skip the confirmation: the target is the newest cycle for the current repo/branch, which is the in-flight cycle you are a step of. Its `manifest.json` exists from creation, its status still reads `running`, and your own attempt files are mid-write — all expected, none of it an error. If no cycle dir exists for this repo/branch (the cycle was driven in-session rather than by a cycle runner), fall back to the newest `$OUT/orch-run-*.md`; if neither exists, report `PASS` with `SUMMARY: no cycle record to analyze` rather than failing the cycle over its own retro.
+**In retro mode**, skip the confirmation: the target is the newest cycle for this repo/branch — the in-flight one you are a step of. Its status reading `running` and your own attempt files being mid-write are expected, not errors. With no cycle dir (an in-session cycle), fall back to the newest `$OUT/orch-run-*.md`; with neither, report `PASS` and `SUMMARY: no cycle record to analyze` rather than failing a cycle over its own retro.
 
 ## Step 1: Deterministic forensics (free — no model reading)
 
@@ -88,33 +86,28 @@ python3 ~/.claude/skills/lib/cycle-forensics.py history --limit 12 > "$OUT/cycle
 echo "$OUT/cycle-forensics-$TS.md"
 ```
 
-Everything mechanical is already extracted for you — don't re-derive any of it by hand:
+The report already carries, mechanically: the **step ledger** and **attempt table** (status, attempts, remediation rounds, cost, tokens, session ids), **cost rollups**, **step summaries**, **artifact inventory**, **decision memos**, the **session map** with `attributed_to` and `🔴 STILL ACTIVE` labels, **live and intra-cycle rework**, the **working tree**, bucketed **commits**, and **mechanical flags**. `FORENSICS.md` in this skill's directory is the full inventory — read it when you need to know exactly what a section holds. Re-derive none of it by hand.
 
-- **Step ledger** — per step: skill, model tier, status, attempts, remediation rounds, cost, wall time.
-- **Attempt table** — every isolated run with its model, status, cost, output/cache-read tokens, session id, artifact.
-- **Cost rollups** by step and model.
-- **Step summaries & follow-ups** — each run's `SUMMARY` / `FOLLOWUP` / `DECISIONS` lines.
-- **Artifact inventory** (sizes, empties) and **decision memos** with status.
-- **Session map** — which sessions the cycle owned, and the **unlinked** ones: same branch, not part of the cycle, each labelled `inter-cycle` / `during` / `after` **plus an `attributed_to` naming which cycle it belongs to**, marked `🔴 STILL ACTIVE` if live, with title, first real prompt, turn count, slash commands used, files edited, and whether they **hand-edited the skill suite**. The window opens at the previous cycle's end and holds open to now — see Retro mode.
-- **Live rework** — files a cycle step edited that an outside session then edited again, and files two different cycle steps both edited. Read from transcript edit-lists, so it appears the moment it happens and needs no commit.
-- **Working tree right now** — uncommitted changed + untracked files. Mid-cycle this is often where the entire diff still is.
-- **Commits** bucketed `inter-cycle` / `during` / `after`, plus **rework files** (shipped by this cycle, edited again later), **inter-cycle rework** (hand-fixed before this cycle, touched again by it — the previous cycle left it wrong), and files only later commits touched.
-- **Mechanical flags** — retries, non-pass steps, contract violations, crashes, cost outliers, cache hotspots, empty artifacts, open memos, unlinked fix-sessions, rework.
+Also capture the suite's prose budgets — a skill over budget is a candidate finding in its own right, and the check is free:
 
-Read the forensics report yourself; it is bounded and cheap. **Do not read step transcripts in this context** — they are megabytes each. Transcripts are read by the subagents in Step 4, by path.
+```bash
+python3 ~/.claude/skills/lib/skill-size.py > "$OUT/skill-size-$TS.txt"
+```
 
-If the report says `no cost data` (the in-session `/orch-ui` runlog surface), you may make no cost findings at all. Say that explicitly in the report instead of estimating. Never invent prices; if a USD figure is genuinely needed and absent, the token counts are what you have.
+Read the forensics report yourself; it's bounded and cheap. **Never read step transcripts in this context** — they are megabytes each, and Step 4's subagents read them by path.
+
+If the report says `no cost data` (the in-session `/orch-ui` runlog surface), make no cost findings at all and say so explicitly rather than estimating. Never invent prices.
 
 ## Step 2: Check what's already been fixed
 
-The human very often patches the skill mid-frustration and moves on. Re-proposing a change that already landed is the fastest way to make this skill worthless.
+The human often patches the skill mid-frustration and moves on. Re-proposing a change that already landed is the fastest way to make this skill worthless.
 
 ```bash
 git -C ~/.claude/skills log --since='<cycle start date>' --format='%h %ad %s' --date=short --name-only
 git -C ~/.claude/skills status --short
 ```
 
-Cross-reference with the forensics `unlinked-session-edited-skills` flags — those name the exact skill files a session touched. For every candidate problem, establish whether the fix is: **already committed**, **sitting uncommitted in the working tree**, or **not addressed**. Only the third kind becomes a proposal; the first two are noted in the report as already-handled (and if an uncommitted fix is incomplete, the proposal is to *finish* it, referencing what's there).
+Cross-reference the forensics `unlinked-session-edited-skills` flags, which name the exact skill files a session touched. Classify every candidate problem as **already committed**, **uncommitted in the working tree**, or **not addressed**. Only the third becomes a proposal; the first two go in the report as already-handled — and an incomplete uncommitted fix gets a proposal to *finish* it, referencing what's there.
 
 Read the current text of any skill you intend to propose editing. A proposal against remembered content is worthless — the suite changes weekly.
 
@@ -135,22 +128,24 @@ Group the flags into candidate problems, then rank. Signal, strongest first:
 | Step failed on toolchain/env (Node, Prisma, deps) | **environmental, not a skill defect** | a fast preflight that detects and bails — never "fix the environment" |
 | Missing `STATUS:` line / crash / nonzero exit | five-line contract violated | the skill's report step |
 | Cost outlier or cache-read hotspot | a step is reading raw material it should delegate or digest | the skill's delegation step, or the model tier in the cycle |
+| Skill over its prose budget (`skill-size-$TS.txt`) | instruction density is above the tier — deliberation the step doesn't need | move rationale to `RATIONALE.md`, cut a restated contract, push deterministic logic to `lib/` |
+| A step re-deriving a rule the skill states as prose (counting, precedence, tallies) | a computation is being reasoned about every run | `lib/`, invoked from the skill |
 | Open decision memo at cycle end | the run sailed past a block | orch-ui's gate, or the raising skill |
 | Empty / duplicate artifacts | artifact plumbing bug | the skill's artifact step |
 | Session hand-edited the skill suite | the human already diagnosed it for you | read their edit first, then extend it |
 
-Two known false-positive sources — check both before promoting a flag to an investigation:
+Two known false-positive sources — check both before promoting a flag:
 
-- **`unlinked-session-during` is often just parallel work.** If the branch is a long-lived dev branch, sessions overlapping the cycle window may be unrelated feature work, not interventions. Read the session's first prompt and edited files: does it touch what the cycle touched? A `during` session that edited the *skill suite* or complained about a cycle step is real signal; one building an unrelated feature is not.
-- **Runlog-surface owner detection is a grep.** On the `orch-run-*.md` surface, "cycle-owned" sessions are found by grepping for the runlog filename, which also matches any later session that merely read it (including a previous `/analyze-cycle` run). Verify before treating a session as cycle-owned.
+- **`unlinked-session-during` is often just parallel work.** On a long-lived branch, a session overlapping the cycle window may be unrelated feature work. Read its first prompt and edited files: one that edited the *skill suite* or complained about a step is signal; one building an unrelated feature is not.
+- **Runlog-surface owner detection is a grep** for the runlog filename, so it also matches any later session that merely read it (including a previous `/analyze-cycle`). Verify before treating a session as cycle-owned.
 
-Weight by `$ARGUMENTS` focus if one was given. Then write the ranked list (max **6**) to the conversation as a one-liner each, and note what you're leaving un-investigated.
+Weight by the `$ARGUMENTS` focus if one was given, then write the ranked list (max **6**) as a one-liner each, and name what you're leaving un-investigated.
 
-**Distinguish environmental from skill defects ruthlessly.** A step that failed because Node was too old for Prisma is not a broken skill — but a step that burned five attempts and 20 minutes discovering that *is*, and the fix is detect-and-bail-fast, not a toolchain change.
+**Distinguish environmental from skill defects ruthlessly.** A step that failed because Node was too old for Prisma is not a broken skill; a step that burned five attempts discovering that *is*, and the fix is detect-and-bail-fast, never a toolchain change.
 
 ## Step 4: Fan out — one reader per investigation (sonnet)
 
-Spawn the investigations **in parallel**, one subagent each (`general-purpose`, `model: sonnet` — reading transcripts and artifacts for a root cause is standard work, not deep reasoning). Pass paths, never contents. Each gets:
+Spawn the investigations **in parallel**, one `general-purpose` subagent each at `model: sonnet`. Pass paths, never contents. Each gets:
 
 > Investigate ONE problem from a completed work cycle. Repo `<REPO>`, branch `<BRANCH>`, cycle `<id>`.
 >
@@ -173,15 +168,15 @@ Spawn the investigations **in parallel**, one subagent each (`general-purpose`, 
 >
 > Do NOT edit any file. Do not propose comment removals or comment-standards steps. Return under 400 words. If the evidence doesn't support a finding, say `no-defect-found` — that is a useful, expected answer.
 
-Transcript reading hints to include for the subagents: filter with `grep`/`python3` on the jsonl rather than reading it whole; the useful entries are `type:"assistant"` messages with `tool_use` blocks, `toolUseResult` payloads, and the final text. Subagent transcripts for a step live in `<session>/subagents/*.jsonl`.
+Include these transcript hints: filter the jsonl with `grep`/`python3` rather than reading it whole; the useful entries are `type:"assistant"` messages with `tool_use` blocks, `toolUseResult` payloads, and the final text. A step's subagent transcripts live in `<session>/subagents/*.jsonl`.
 
 ## Step 5: Corroborate — systemic or one-off
 
 For each finding that came back `skill-defect` or `cycle-definition`, check `$OUT/cycle-history-$TS.md`:
 
-- Does the same skill show a high `mean attempts`, `non-pass slots`, or `$/run` across **other** cycles? → **systemic**. Propose the fix.
-- Only this cycle, and the cause traces to this task's specifics? → **one-off**. Propose only if the fix is cheap and safe; otherwise record it as a watch-item with the evidence, so a second occurrence promotes it.
-- Contradicted by other cycles (the skill is fine everywhere else)? → say so and drop it.
+- High `mean attempts`, `non-pass slots`, or `$/run` for that skill across **other** cycles → **systemic**. Propose the fix.
+- Only this cycle, cause traces to this task's specifics → **one-off**. Propose only if the fix is cheap and safe; otherwise record a watch-item with the evidence so a second occurrence promotes it.
+- Contradicted by other cycles → say so and drop it.
 
 A single cycle is one data point. Over-fitting the suite to one bad run is a worse outcome than leaving a one-off unfixed — the history table exists so you can tell the difference. State the classification for every proposal.
 
@@ -234,6 +229,11 @@ still belong here.>
 **Regression risk:** <what the current wording protects; whether this breaks it>
 **Already-fixed check:** <not addressed | partially, uncommitted in <path> | superseded by <sha>>
 
+## Suite prose budgets
+<the `skill-size.py` table from Step 1: any skill over its tier budget, with how far over.
+"All within budget" is a valid and expected line. A skill that grew past budget since the
+last retro is a finding, not a note.>
+
 ## Already handled
 <problems found that the human already fixed — with the commit or working-tree change.>
 
@@ -248,35 +248,30 @@ Rules for proposals, all of them hard:
 
 - **Every proposal cites concrete evidence** — an artifact path, a transcript session, a commit, a quoted line. A proposal whose support is "this seems better" gets cut, not softened.
 - **Smallest edit that prevents recurrence.** No rewrites-while-you're-in-there, no drive-by restructuring of a skill you happened to open.
-- **Never propose removing comments** — from skills or from code — and never reintroduce a comment-standards or comment-removal step into any flow. This is a standing constraint from CLAUDE.md, not a preference.
-- **Respect the suite's own conventions** (AUTHORING.md): caps stay integers fixed at authoring time; a pause always ends the turn; deterministic plumbing goes in `lib/`, not inlined into a SKILL.md; a global skill never loads a repo-specific project skill.
-- **Model-tier proposals cite the rubric** — haiku mechanical, sonnet standard, opus expensive-if-wrong — and the measured cost/attempt evidence for the change.
-- **A proposal touching CLAUDE.md or AUTHORING.md is a policy change**, not a skill edit. Flag it as such, keep it separate, and never apply it under a general "yes, apply the proposals."
-- **No proposal may be a code change to the analyzed repo.** This skill improves the tooling; fixing the product is a different cycle.
+- **A proposal that adds prose to a SKILL.md must say where the rationale goes.** State the rule as an imperative in the skill; the incident narrative that justifies it goes in that skill's `RATIONALE.md` (AUTHORING.md § Rationale files). A proposal whose text embeds the war story in SKILL.md is not ready — rewrite it before proposing.
+- **A proposal must fit the target's prose budget.** Check `$OUT/skill-size-$TS.txt` (Step 1) for the target's tier and headroom. An edit that would push a skill over must name what it replaces or moves out — never "add this too." This is what keeps retros from ratcheting the suite's prose upward one justified clause at a time. A skill already over budget gets a trim proposal of its own, with the size table as evidence.
+- **Never propose removing comments** — from skills or from code — and never reintroduce a comment-standards or comment-removal step into any flow. Standing constraint from CLAUDE.md.
+- **Respect the suite's conventions** (AUTHORING.md): caps stay integers fixed at authoring time; a pause always ends the turn; deterministic plumbing goes in `lib/`; a global skill never loads a repo-specific project skill.
+- **Model-tier proposals cite the rubric** — haiku mechanical, sonnet standard, opus expensive-if-wrong — plus the measured cost/attempt evidence.
+- **A proposal touching CLAUDE.md or AUTHORING.md is a policy change**, not a skill edit. Flag it, keep it separate, never apply it under a general "yes, apply the proposals."
+- **No proposal may change code in the analyzed repo.** This skill improves the tooling; fixing the product is a different cycle.
 
 ## Step 7: Present, then gate application
 
 **Retro mode skips this entire step** — print the summary, report `PASS`, and stop. No menu, no memo, no edits.
 
-Print a compact summary: the verdict, the cost line, what leaked, and the proposals as one line each (`P1 · target file · priority · systemic/one-off`). Point at the artifact. Do not dump the artifact into the conversation.
+Print a compact summary: the verdict, the cost line, what leaked, and one line per proposal (`P1 · target file · priority · systemic/one-off`). Point at the artifact; never dump it into the conversation.
 
-Then ask — and this **ends the turn**:
+Then ask, per **AUTHORING.md § Interaction contract** — and this **ends the turn**:
 
 - **A) Apply the high-priority proposals** (P<n>, P<n>) — the ones with systemic evidence
 - **B) Apply a subset I name**
 - **C) Propose only — leave the skills alone for now**
 - **―) none of these — add context**
 
-Wait for the actual answer. A quiet human is a blocked task, not approval to start editing the suite (CLAUDE.md: silence is never consent).
+**If approved**, apply only the named proposals, exactly as written — no scope expansion at apply time. Re-read each target file first, edit, then append an `## Applied` section to the artifact listing each change and where it landed. Leave the skills repo uncommitted unless asked; these are the human's global tools.
 
-**If approved**, apply only the named proposals, exactly as written in the artifact — no scope expansion at apply time. Re-read each target file first, edit, and then append an `## Applied` section to the artifact listing each change and the file it landed in. Leave the skills repo uncommitted unless the human asks for a commit; these are their global tools.
-
-**If running isolated** (no AskUserQuestion): do not apply anything. Raise one decision memo naming the proposals and their priorities:
-
-```bash
-ID=$(~/.claude/skills/lib/decide.sh next-id)
-```
-Write `$OUT/decisions/$ID-analyze-cycle-apply-proposals.md` with the standard frontmatter (`id, title, status: open, raised_by: analyze-cycle, raised_at, resolution:`) and the lettered options above, then report `STATUS: BLOCKED` with `DECISIONS: $ID`.
+**If isolated** (no AskUserQuestion): apply nothing. Raise one memo — `$OUT/decisions/d{NNN}-analyze-cycle-apply-proposals.md`, `raised_by: analyze-cycle`, the options above — per AUTHORING.md § Decision memos, then report `STATUS: BLOCKED` with its id.
 
 ## Report contract
 
@@ -290,14 +285,11 @@ FOLLOWUP: <the highest-priority proposal and its target file, or ->
 DECISIONS: <memo ids, or ->
 ```
 
-`PASS` means the analysis completed — including "the cycle was clean, no proposals." A cycle with problems still yields `PASS`; the problems are the product. `FAIL` is for when the analysis itself couldn't run (no such cycle, no readable forensics). In **retro mode**, `BLOCKED` is not an available outcome (see Retro mode above).
+`PASS` means the analysis completed, including "clean cycle, no proposals" — a cycle with problems still yields `PASS`, since the problems are the product. `FAIL` is only for an analysis that couldn't run (no such cycle, no readable forensics). In retro mode `BLOCKED` is unavailable.
 
 ## Rules
 
-- Never read a step transcript in this context. Paths to subagents; that's the whole reason the fan-out exists.
-- Never estimate cost. Report what the runner recorded, or report that nothing was recorded.
-- Never apply a proposal without explicit approval, and never expand past what was approved.
-- Never propose a fix for a problem already fixed — Step 2 exists precisely to stop that.
-- One cycle is one data point. Label systemic vs one-off on every proposal, and let the history table decide.
-- Environmental failures get detect-and-bail proposals, not environment changes.
-- Keep your own output short: the confirmation, the triage list, the summary, and the artifact path.
+The step-level rules above are not restated here. Two that belong to the whole run:
+
+- **Keep your own output short** — the confirmation, the triage list, the summary, the artifact path. Nothing else.
+- **Never apply a proposal without explicit approval**, and never expand past what was approved.

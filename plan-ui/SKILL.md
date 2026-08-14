@@ -23,9 +23,9 @@ confidence_threshold: 75
 
 **Arguments**: $ARGUMENTS — description of the UI task to plan
 
-This skill owns the **planning judgment**: which files the change actually touches, the approach, the patterns to follow, the test impact, and the open questions. The fixed facts around the task — learnings, in-flight branch state, tooling constraints, task classification, user-named files — are gathered upstream by `/analyze-task` and consumed in Step 1. This skill does not re-derive them; it reasons over them and discovers the rest.
+This skill owns the **planning judgment**: which files the change touches, the approach, the patterns to follow, the test impact, the open questions. `/analyze-task` gathers the fixed facts upstream and Step 1 consumes them — reason over those, don't re-derive them.
 
-**Out of scope — presentation-layer decisions.** Semantic element selection (`div` vs `span` vs `button` vs list/landmark elements), the CSS approach, and `className`/token composition are **not** planning judgments — they are deferred to `/impl-ui`'s presentation pass. The plan may *name* the design-system or styling pattern to follow as a reference (so impl knows which convention applies), but it does **not** resolve element-level markup or styling. If a presentation choice genuinely blocks the structure (e.g. a layout primitive that dictates the component tree), raise it as an Open Question rather than deciding it here.
+**Out of scope — presentation-layer decisions.** Semantic element selection, the CSS approach, and `className`/token composition belong to `/impl-ui`'s presentation pass (`RATIONALE.md`). Name the design-system or styling pattern to follow and its reference file; do not resolve element-level markup. If a presentation choice genuinely dictates the component tree, raise it as an Open Question.
 
 ## Step 1: Load the Task-Context Artifact
 
@@ -34,24 +34,20 @@ source ~/.claude/skills/lib/skill-env.sh   # sets REPO, BRANCH, OUT, SRC, …
 ANALYSIS=$(ls -t "$OUT"/analysis-*.md 2>/dev/null | head -1)
 ```
 
-**If an analysis artifact exists** (`$ANALYSIS` is non-empty): read it. It supplies — already distilled — the task classification, mentioned files, in-flight conflicts, tooling constraints (TS/ESLint/Prettier), and relevant learnings. Trust it; do not re-query QMD or re-read tooling config. Carry its **Tooling Constraints** and **Gotchas** forward verbatim into the plan, and treat its **In-Flight Conflicts** as already-accounted-for.
+**If `$ANALYSIS` is non-empty**: read it. It already supplies the task classification, mentioned files, in-flight conflicts, tooling constraints, and relevant learnings — trust it rather than re-querying QMD or re-reading tooling config. Carry its **Tooling Constraints** and **Gotchas** into the plan verbatim; treat its **In-Flight Conflicts** as accounted for.
 
-**Fallback — no analysis artifact** (standalone `/plan-ui` with no prior `/analyze-task`): invoke `/analyze-task` with `$ARGUMENTS` first, then read the artifact it writes. If that is not possible, do the gathering inline — load learnings (QMD `wiki` collection for work repos, else `~/.claude/repo-learnings/$REPO/`), snapshot the branch diff against `main`, and read TS/ESLint/Prettier config — before continuing. Note in the plan that it ran without a pre-built analysis.
+**No artifact** (standalone run): invoke `/analyze-task` with `$ARGUMENTS` and read what it writes. Failing that, gather inline — learnings (QMD `wiki`, else `~/.claude/repo-learnings/$REPO/`), the branch diff against `main`, TS/ESLint/Prettier config — and note that it ran without one.
 
-**Seed already-answered questions from resolved decision memos** (a prior `/plan-ui` run on this branch may have raised Open Questions that are now answered):
-```bash
-~/.claude/skills/lib/decide.sh list resolved
-```
-Read each listed memo under `$OUT/decisions/` and its `## Resolution` block. Treat these as settled — do not re-raise them as Open Questions in Step 4; instead fold the resolution into the relevant plan section (Approach, Files, Patterns, whichever it bears on), citing the memo id inline (e.g. "per `d002`, resolved: …").
+**Seed settled questions.** Read every memo `~/.claude/skills/lib/decide.sh list resolved` names, under `$OUT/decisions/`. Fold each `## Resolution` into the section it bears on, citing the id inline ("per `d002`, resolved: …"), and do not re-raise it in Step 4.
 
 ## Step 2: Read Relevant Existing Code
 
-Now do the discovery the analysis deliberately left open — **which files this change actually touches.** Starting from the mentioned files and reference implementations in the artifact, find and read:
-- The most relevant existing feature for pattern reference (use reference implementations from `index.md` if relevant)
+Discover what the analysis deliberately left open — **which files this change actually touches.** From the artifact's mentioned files and reference implementations, find and read:
+- The most relevant existing feature, for pattern reference
 - The files that will be modified
-- Any parent views or layouts that affect where this fits
+- Any parent view or layout that affects where this fits
 
-These reads land in the planning session and are the one deliberate residual to the context-budget effort (Step 3's test reads are delegated; these are not, because the planning judgment needs the source in context). Keep it bounded: read the few files you genuinely need to place the change and pick patterns — not the whole feature tree. If you find yourself opening more than a handful, delegate the survey to a fresh `general-purpose` agent and take back a summary instead.
+These reads are the one deliberate residual to the context budget; the planning judgment needs the source in context. Read only what you need to place the change and pick patterns — past a handful of files, delegate the survey to a fresh `general-purpose` agent and take back a summary.
 
 ## Step 3: Summarize Existing Tests for Affected Files
 
@@ -64,13 +60,13 @@ Run the affected-test finder on the files identified in Step 2:
 
 It prints `DIRECT_UNIT` / `INDIRECT_UNIT` and `DIRECT_E2E` / `INDIRECT_E2E`.
 
-**Delegate reading to a fresh subagent — do not read test files inline.** E2E specs and page objects can be 400-600 lines each; loading them directly would bloat the planning context with content that only needs to be summarized. Spawn a fresh read-only analysis agent with the reported file paths and the task below.
+**Delegate the reading — never read test files inline.** E2E specs and page objects run 400-600 lines each and only need summarizing. Resolve the agent type, then spawn one fresh read-only agent:
 
-This is a global, repo-agnostic skill, so resolve the agent type with a fallback — prefer a repo's tuned `codebase-analyzer` (the incentives repo ships one) and otherwise use `general-purpose` constrained read-only by the task prompt. Detect by `name:` frontmatter (Claude Code resolves by `name:`, not filename, so this tolerates the `codebase-analyzer..md` double-dot in incentives):
 ```bash
-grep -rqlE "^name:[[:space:]]*codebase-analyzer([[:space:]]|$)" .claude/agents/ 2>/dev/null && ANALYZER=codebase-analyzer || ANALYZER=general-purpose
+ANALYZER=$(~/.claude/skills/lib/resolve-agent.sh codebase-analyzer)
 ```
-Spawn a fresh `$ANALYZER` agent with the reported file paths and this task:
+
+Give it this task:
 
 > Read these test files: [DIRECT_UNIT paths], [INDIRECT_UNIT paths], [DIRECT_E2E paths + their associated page objects]. For each unit test file, return: (1) what cases are currently covered, (2) which tests would break given [describe the planned change in 1 sentence], (3) any mocks or fixtures that reference things being changed. For each E2E spec, return: (1) which user flows touch the affected component, (2) which flows would break due to the planned change. Return a compact structured summary — do not include raw file contents or long code excerpts.
 
@@ -144,7 +140,7 @@ Output a structured plan:
 [Any decisions that require user input before implementation]
 ```
 
-Keep the plan concrete and short. Reference specific file paths wherever possible. Do not restate the steering docs — reference what the code actually does.
+Keep the plan concrete and short, with specific file paths. Reference what the code does, not the steering docs.
 
 ## Step 5: Write Output File
 
@@ -153,9 +149,9 @@ source ~/.claude/skills/lib/skill-env.sh
 echo "$OUT/plan-$TS.md"   # ← write the plan to this exact path
 ```
 
-Write the full implementation plan produced in Step 4 to the path echoed above. This file is read by `/impl-ui` when invoked with `use plan` — it picks up the most recent `plan-*.md` in the branch directory.
+Write the Step 4 plan to the path echoed above; `/impl-ui` picks up the most recent `plan-*.md` when invoked with `use plan`.
 
-Use the Write tool when it's available. **If you are running without a Write tool** (e.g. spawned as the read-only `Plan` agent type by `/orch-ui`), persist the same content with a quoted Bash heredoc instead — the quoted delimiter prevents `$`/backtick expansion of the plan body (source in the same block so `$OUT`/`$TS` are set):
+Use the Write tool if you have one. **Without it** (the read-only `Plan` agent under `/orch-ui`), use a quoted heredoc — the quoted delimiter stops `$`/backtick expansion of the plan body; source in the same block so `$OUT`/`$TS` are set:
 
 ```bash
 source ~/.claude/skills/lib/skill-env.sh
@@ -164,7 +160,7 @@ cat > "$OUT/plan-$TS.md" <<'PLAN_EOF'
 PLAN_EOF
 ```
 
-**Then persist the plan's file list** to `$OUT/plan-files.txt` — one repo-relative path per line, every file the plan creates or modifies, plus any directory the plan creates (with a trailing slash, so files that appear inside it later are recognized as in-scope). Downstream steps use this via `lib/plan-scope-check.sh` to tell a real collision from unrelated parallel work on the same branch, instead of each re-scanning the whole dirty tree:
+**Then persist the plan's file list** to `$OUT/plan-files.txt` — one repo-relative path per line for every file created or modified, plus any directory created (trailing slash, so files appearing in it later count as in-scope). `lib/plan-scope-check.sh` reads this downstream:
 
 ```bash
 source ~/.claude/skills/lib/skill-env.sh
@@ -176,7 +172,7 @@ FILES_EOF
 
 ## Step 6: Publish the Plan Artifact
 
-**Always** present the full plan as an HTML artifact — the plan file plus a tiny inline summary is not enough. The page is produced by a pre-designed template, so this costs almost no context: **do not author any HTML and do not load artifact-design** — run the render script and publish its output unchanged.
+**Always** publish the full plan as an HTML artifact. A template produces the page: **author no HTML, do not load artifact-design** (`RATIONALE.md`) — run the script, publish its output unchanged.
 
 ```bash
 source ~/.claude/skills/lib/skill-env.sh
@@ -184,54 +180,19 @@ source ~/.claude/skills/lib/skill-env.sh
 # prints the generated .html path
 ```
 
-The script wraps the plan markdown into `plan-ui/plan-template.html` (title, repo/branch/date chips, styled sections, Open Questions callout — rendered client-side by the template's inline JS).
+Call the **Artifact tool** with the printed `.html` path — `favicon: "📐"` (stable across plan artifacts), `description`: one sentence on what the plan implements, no `title` (the script injected one). Each run mints its own URL; that's intended.
 
-Then call the **Artifact tool** with the printed `.html` path:
-- `favicon`: `"📐"` (keep this stable across plan artifacts)
-- `description`: one sentence — what the plan implements
-- title comes from the `<title>` the script injected; don't pass one
-
-Each plan is a new timestamped file, so each `/plan-ui` run mints its own artifact URL — that's intended.
-
-**No Artifact tool available** (e.g. spawned as the read-only `Plan` agent by `/orch-ui`): still run the render script, and put the generated `.html` path prominently in your output so the coordinator or user can publish it with the Artifact tool. Never skip the render.
+**No Artifact tool** (the read-only `Plan` agent under `/orch-ui`): render anyway and put the `.html` path prominently in your output for the coordinator to publish. Never skip the render.
 
 ## Step 7: Final User-Facing Summary
 
-After publishing, print a summary to the conversation. The artifact carries the full plan layout; the inline message exists so pending decisions can be answered in-chat without opening anything.
+Print a summary to the conversation. The artifact carries the layout; the inline message exists so pending decisions can be answered in chat without opening it.
 
-**Also persist each Open Question as a decision memo.** This is additive — it does not replace the inline listing below; it makes each question durable and resumable across sessions per AUTHORING.md's "Decision memos & per-repo review heuristics" convention.
-
-Dedupe-before-raise:
-```bash
-source ~/.claude/skills/lib/skill-env.sh
-~/.claude/skills/lib/decide.sh list open
-```
-For each Open Question not already covered by an existing open memo (extend that memo instead of raising a near-duplicate):
-```bash
-ID=$(~/.claude/skills/lib/decide.sh next-id)
-mkdir -p "$OUT/decisions"
-cat > "$OUT/decisions/$ID-plan-ui-{slug}.md" <<'MEMO_EOF'
----
-id: {ID}
-title: {question, one line}
-status: open
-raised_by: plan-ui
-raised_at: {ISO-8601 datetime}
-resolution:
----
-
-## Context
-{the question's context, verbatim from the plan}
-
-## Options
-{lettered options per AUTHORING.md's Interaction contract — A) B) C) …, recommendation first, final ―) none of these — add context}
-{For any option that trades off against a prerequisite this memo's own Context names as missing (e.g. an unmeasured value, an untested assumption): add "Risk if chosen without it: {one line}" under that option, so resolving it without meeting the prerequisite requires engaging with the tradeoff, not just picking a letter.}
-MEMO_EOF
-```
+**Also persist each Open Question as a decision memo**, additive to the inline listing, per **AUTHORING.md § Decision memos** (lifecycle, ids, dedupe-before-raise); `raised_by: plan-ui`. One plan-specific addition: where an option trades off against a prerequisite the memo's Context names as missing, add `Risk if chosen without it: {one line}` under it — so resolving takes engaging with the tradeoff, not picking a letter.
 
 **Rules:**
-- **Always list every Open Question inline, in full** — verbatim from the plan, numbered, with any context/options needed to answer. Never write "see the plan for questions" or "open the artifact to review questions."
-- Print a compact summary using this shape:
+- **List every Open Question inline, in full** — verbatim, numbered, with the context needed to answer it. Never "see the plan for questions."
+- Print a compact summary in this shape:
 
 ```
 Plan artifact: {artifact URL}
@@ -249,12 +210,23 @@ Plan file: {relative path to plan file}
 (or "**Open Questions:** none — ready to implement" if there are zero)
 ```
 
-If there are open questions, end the message by asking the user to answer them before `/impl-ui` runs. Do not proceed to implementation while questions are unanswered.
+End by asking the user to answer any open questions before `/impl-ui` runs, and do not proceed while they are unanswered.
 
-**Resolve in this same conversation the moment the user answers.** Per AUTHORING.md's Interaction contract, a memo answered here must be recorded here — never left for the dev-screen UI's Resolve-decision card to catch up. When the user's next reply answers one or more Open Questions (plain chat text, not necessarily one AskUserQuestion per question), immediately, before doing anything else:
+**Resolve in this conversation the moment the user answers** (`RATIONALE.md`). A reply that answers a question — plain chat text, not necessarily one AskUserQuestion per question — is recorded before anything else:
 ```bash
 ~/.claude/skills/lib/decide.sh resolve {id} <<'EOF'
 {the user's chosen answer, one line}
 EOF
 ```
-Do this for every memo the reply resolves, then fold each resolution into the plan (same as Step 1's "seed already-answered questions" handling) before continuing to `/impl-ui` or any further work. If the reply only partially answers the open questions, resolve the ones it does answer and re-ask the rest — don't hold all of them open waiting for a single complete reply.
+Then fold each resolution into the plan, as in Step 1's seeding. A partial reply resolves the questions it answers and re-asks the rest; never hold them as a batch waiting for one complete reply.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. Re-sourcing skill-env.sh
+# re-stamps $TS, so pass the plan path you actually wrote.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append plan "PASS|FAIL|BLOCKED" "<plan path just written, or ->" \
+  "<one-sentence summary>" "<open questions the human must answer, or ->" "<decision memo ids, or ->"
+```

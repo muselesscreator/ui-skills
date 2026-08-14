@@ -21,16 +21,13 @@ confidence_threshold: 75
 
 **Context-budget constraint — this skill runs in the calling session.** Every token read here lands in the user's context window and stays. The orchestrator (this skill) must never read the files that implementation workers write. It passes file paths; workers do the reading. The goal is a lean orchestrator (~10k context added) that spawns disposable fresh workers (~30-50k each, then gone).
 
-**Agent types (with fallback — this is a global, repo-agnostic skill).** The workers below are spawned with the Task tool. Where a step names a custom agent type, use it **only if the current repo defines it** (e.g. the incentives repo ships tuned `builder`/`codebase-analyzer` agents under `.claude/agents/`); otherwise fall back to the repo-agnostic default. Resolve the fallback once, in Step 1, then reuse the decision for every spawn. Detect by the agent's `name:` frontmatter — Claude Code resolves agent types by `name:`, not filename, so this is robust to odd filenames (e.g. the `codebase-analyzer..md` double-dot in incentives):
+**Agent types.** Resolve once in Step 1 and reuse for every spawn — this is a global skill, so it prefers a repo's tuned agents and falls back when absent (AUTHORING.md § Global-skill hygiene):
 ```bash
-agent_defined() { grep -rqlE "^name:[[:space:]]*$1([[:space:]]|$)" .claude/agents/ 2>/dev/null; }
-agent_defined builder          && BUILDER=builder          || BUILDER=general-purpose
-agent_defined codebase-analyzer && ANALYZER=codebase-analyzer || ANALYZER=general-purpose
+BUILDER=$(~/.claude/skills/lib/resolve-agent.sh builder)
+ANALYZER=$(~/.claude/skills/lib/resolve-agent.sh codebase-analyzer)
 ```
-- `builder` → fallback `general-purpose` with `model: sonnet` (writers — need Edit/Write).
-- `codebase-analyzer` → fallback `general-purpose` constrained read-only by its task prompt (it only reads and returns findings; the orchestrator writes any report). Keep the depth — don't fall back to `Explore`, which reads excerpts rather than whole files.
-
-This preserves the tuned agents where they exist while keeping the skill working in any repo, per `AUTHORING.md`'s global-skill hygiene rule.
+- `$BUILDER` — writers, need Edit/Write. On the `general-purpose` fallback, pass `model: sonnet`.
+- `$ANALYZER` — read-only, constrained by its task prompt; the orchestrator writes any report. Never substitute `Explore`, which reads excerpts rather than whole files.
 
 ## Step 1: Read Plan + Write Implementation Brief
 
@@ -44,11 +41,11 @@ ls -t "$OUT"/plan-*.md 2>/dev/null | head -1
 ```
 Read it. If $ARGUMENTS contains a file path: read that file. Otherwise: treat $ARGUMENTS as the task description — gather the bare minimum needed to write the brief (task description, intended files, known patterns/gotchas).
 
-**Refuse to start if the plan's decisions are still open.** When a plan exists, check for unresolved memos before doing anything else:
+**Refuse to start if the plan's decisions are still open.** Before anything else:
 ```bash
 ~/.claude/skills/lib/decide.sh list open
 ```
-If this plan's memos appear (non-empty, matching this run's `raised_by`/context), **stop here** — do not write the brief, do not spawn workers. Surface the open memo ids and titles to the user/orchestrator and end the turn; this is a pause per AUTHORING.md's Interaction contract (silence is never consent — do not proceed on a guess).
+If this plan's memos appear, **stop here** — no brief, no workers. Surface their ids and titles and end the turn (AUTHORING.md § Interaction contract).
 
 **Check for collisions against the plan's own files — not the whole dirty tree.**
 
@@ -56,7 +53,7 @@ If this plan's memos appear (non-empty, matching this run's `raised_by`/context)
 ~/.claude/skills/lib/plan-scope-check.sh   # exit 1 + paths = real collision; exit 0 = clear
 ```
 
-Escalate **only** on a non-empty result, and quote exactly those paths. A dirty tree that doesn't intersect the plan is unrelated parallel work on a shared branch — proceed, and do not mention it as a blocker. On a real collision, raise one decision memo (dedupe first: `decide.sh list open`) offering commit-the-in-flight-work-first vs implement-on-top, then pause. Never run your own unscoped `git status` to second-guess this — that is what produced five separate blocking rounds across three steps on `dev-screen/home-cleanup`.
+Escalate **only** on a non-empty result, quoting exactly those paths. A dirty tree that doesn't intersect the plan is unrelated parallel work on a shared branch — proceed, and don't mention it as a blocker. On a real collision, raise one memo offering commit-the-in-flight-work-first vs implement-on-top, then pause. Never run your own unscoped `git status` to second-guess this (`RATIONALE.md`).
 
 **Honor resolved decisions — do not default to the plan's recommendation.** If the plan carries memos, read what was actually decided:
 ```bash
@@ -140,17 +137,11 @@ When done, return a compact summary: files written, patterns followed, any devia
 
 Wait for all workers to complete before proceeding.
 
-**Decision gate — resolve here, not in the dev-screen UI.** After workers finish, check for anything they raised:
+**Decision gate — resolve here.** After workers finish:
 ```bash
 ~/.claude/skills/lib/decide.sh list open
 ```
-A worker-raised memo (`raised_by: impl-ui`, this run) is a pause per AUTHORING.md's Interaction contract — but `impl-ui` runs in the calling (interactive) session, so resolve it right here instead of ending the turn and waiting on the UI: present each memo via AskUserQuestion (recommendation first, lettered options, final catch-all per the Interaction contract's menu shape), then immediately
-```bash
-~/.claude/skills/lib/decide.sh resolve {id} <<'EOF'
-{the user's chosen answer, one line}
-EOF
-```
-Fold the resolution into a short addendum to the implementation brief and respawn only the worker(s) left with blocked files (same group, same file list, brief path plus the resolution) before continuing to Step 3. Never let a worker-raised memo stay open while the cycle moves on — that's what forces the same answer to be re-entered later through the UI's Resolve-decision card.
+`impl-ui` runs in the calling interactive session, so a worker-raised memo is resolved right here rather than left open for a later surface (`RATIONALE.md`) — present each via AskUserQuestion and `decide.sh resolve {id}` with the answer on stdin, per **AUTHORING.md § Decision memos**. Then fold the resolution into a short addendum to the brief and respawn only the worker(s) that had blocked files, before Step 3.
 
 **If no Agent tool is available** (spawned under a restricted agent type): run Step 2 inline — implement all files sequentially in this context, loading only the brief and per-file reference code. Note in the Step 5 report that it ran inline. Any ambiguity is then a direct AskUserQuestion (no worker to relay through) — ask and `decide.sh resolve` immediately, same as the decision gate above.
 
@@ -174,13 +165,13 @@ If a presentation choice is a genuine ambiguity the brief's reference pattern do
 Report the files you edited, any element/styling choice that was non-obvious, and any decision memo ids raised (or "none").
 ```
 
-Why sonnet: presentation markup and styling are standard implementation work per the model-tiering rubric in `AUTHORING.md`. Keep it at sonnet (not haiku) because accessibility semantics carry real judgment.
+Sonnet, not haiku: presentation markup is standard implementation work, but accessibility semantics carry real judgment (AUTHORING.md § Model & effort tiering).
 
-Run the same decision gate as Step 2 on this worker's result before moving to Step 4: check `decide.sh list open`, resolve any new memo immediately (AskUserQuestion + `decide.sh resolve`, piped answer on stdin), fold the resolution in, and respawn this worker if a file was left blocked.
+Run Step 2's decision gate on this worker's result before Step 4.
 
 ## Step 4: Fast Type Gate
 
-Catch type errors **now**, before the behavioral-validation pass — `/validate-ui` runs on opus in the feature cycle, and a type error surviving to that gate wastes an expensive validation on code that can't even compile.
+Catch type errors **now**, before the behavioral-validation pass (`RATIONALE.md`).
 
 Resolve the affected packages' filter flags, then run a scoped type-check:
 
@@ -246,4 +237,15 @@ This is a low-context step — do it inline (no subagent needed). Based on what 
 If there is nothing new to add:
 ```
 ✓ No learnings updates — implementation followed established patterns.
+```
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. Re-sourcing skill-env.sh
+# re-stamps $TS, so pass the impl-report path you actually wrote.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append impl "PASS|FAIL|BLOCKED" "<impl-report path just written, or ->" \
+  "<one-sentence summary>" "<test gaps or follow-ups, or ->" "<decision memo ids, or ->"
 ```

@@ -21,6 +21,13 @@ steps:
     model: sonnet
     stop_on_fail: true
     note: Picks up the latest plan and implements it. sonnet — standard build; internally delegates the presentation-layer pass (semantic markup, CSS, class composition) to a sonnet subagent — same-tier here, so it buys context isolation rather than a tier drop (the drop applies on a direct opus /impl-ui). Ends with a scoped type-check gate so type errors are caught here, not by the opus validate step. Default agent type (needs Edit/Write, and the Agent tool to fan out the presentation pass).
+  - id: verify-premises
+    skill: verify-claims
+    args: "the docblocks, type predicates, and enum/field-type assumptions this branch added"
+    scope: repo
+    model: sonnet
+    stop_on_fail: false
+    note: Grounds the branch's factual claims about existing code in verbatim quotes before the behavioural gate. Targets the class impl-ui cannot self-catch: a predicate or docblock asserting something about generated/config data (enum spellings, field-type families, display_if coverage) that reads correct against the two or three call sites the plan cited and is false across the full set. Auto-skipped if the repo has no verify-claims skill. sonnet — grep-and-quote census work, not deep reasoning. stop_on_fail false — advisory, so a repo without the data surface cannot halt a cycle.
   - id: validate
     skill: validate-ui
     args: "$TASK"
@@ -48,7 +55,7 @@ steps:
     args: ""
     interactive: true
     stop_on_fail: false
-    note: Runs in the main session, not isolated — no existing skill pushes or opens a PR, so this step does that first, then hands off. Before invoking pr-review-ui, push the branch and `gh pr create --draft`, but only after an explicit human confirmation — per CLAUDE.md, opening a PR always requires an explicit yes, never an automatic step. If the human declines or doesn't confirm, skip the rest of this step (no PR to review) and continue to the wiki steps. Once the PR exists, invoke pr-review-ui (Skill tool) against it — it checks out the PR via `gh pr checkout` — using its own internal per-lens model tiers. stop_on_fail false — advisory: surfaces findings on the PR for the human and any later /pr-review pass to act on, does not block or undo committed work.
+    note: Runs in the main session, not isolated — no existing skill pushes or opens a PR, so this step does that first, then hands off. Before invoking pr-review-ui, push the branch and `gh pr create --draft`, but only after an explicit human confirmation — per CLAUDE.md, opening a PR always requires an explicit yes, never an automatic step. If the human declines or doesn't confirm, skip the rest of this step (no PR to review) and continue to the wiki steps. Once the PR exists, invoke pr-review-ui (Skill tool) against it — it checks out the PR via `gh pr checkout` — using its own internal per-lens model tiers. stop_on_fail false — advisory: surfaces findings on the PR for the human and any later /pr-review pass to act on, does not block or undo committed work. If the human applies any finding in-session, treat the fixes as a code change, not as review bookkeeping: re-run validate and cleanup over them before the wiki steps, and refresh the PR body — a fix round that changes a shared predicate's semantics can introduce the next round's findings, and it silently falsifies the description written against the pre-fix code.
   - id: braindump
     skill: wiki-braindump
     args: ""

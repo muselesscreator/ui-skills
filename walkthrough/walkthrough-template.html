@@ -1,0 +1,520 @@
+<meta charset="utf-8">
+<title>
+{{TITLE}}
+</title>
+<style>
+  /* Palette lifted from dev-screen's "iTerm Balanced" theme
+     (client/src/index.css) — a single committed dark look, chosen by direct
+     visual comparison for red-green color-vision deficiency. Reused here
+     verbatim rather than re-derived: yellow = structure/heading, cyan =
+     interaction/success/addition, lavender = working, magenta = failure/
+     deletion. Every color pairing below is reinforced by a symbol, border,
+     or label — never hue alone. */
+  :root {
+    color-scheme: dark;
+    --bg: #15191f;
+    --rail-bg: #0f1318;
+    --card: linear-gradient(165deg, #262d36 0%, #1c2229 100%);
+    --card-solid: #1c2229;
+    --ink: #ffffff;
+    --muted: #cbd1d8;
+    --rule: #5f6c7a;
+    --rule-strong: #96a2af;
+    --brass: #fff200;
+    --brass-soft: #d4cb00;
+    --accent: #60fdff;
+    --working: #a7abf2;
+    --green: #60fdff;
+    --ruby: #e17ee1;
+    --add: var(--green);
+    --add-bg: rgba(96, 253, 255, 0.12);
+    --del: var(--ruby);
+    --del-bg: rgba(225, 126, 225, 0.14);
+    --node-bg: var(--brass);
+    --node-ink: #15191f;
+    --font-heading: 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+    --focus-ring: 0 0 0 4px rgba(96, 253, 255, 0.45);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2.75rem 1.5rem 5rem;
+  }
+  a { color: var(--accent); }
+  a:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
+
+  h1, h2, h3 {
+    font-family: var(--font-heading);
+    text-wrap: balance;
+    line-height: 1.25;
+  }
+  .eyebrow {
+    margin: 0 0 .5rem;
+    font: 650 .72rem/1 -apple-system, sans-serif;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 { margin: 0 0 .9rem; font-size: 1.85rem; font-weight: 650; color: var(--brass); }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; }
+  .chip {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .74rem;
+    color: var(--muted);
+    background: var(--rail-bg);
+    border: 1px solid var(--rule-strong);
+    border-radius: 4px;
+    padding: .2rem .55rem;
+    white-space: nowrap;
+  }
+  /* A file path chip wraps its backtick-quoted text in <code> (via inline()) —
+     the chip already supplies monospace/background/border, so the nested
+     code must not stack a second one on top. */
+  .chip code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+  header { padding-bottom: 1.6rem; border-bottom: 2px solid var(--rule-strong); }
+
+  .tldr {
+    margin: 1.6rem 0 2.4rem;
+    padding: 1rem 1.2rem;
+    background: var(--card);
+    border: 1px solid var(--rule-strong);
+    border-left: 4px solid var(--brass);
+    border-radius: 6px;
+  }
+  .tldr p { margin: 0; }
+
+  nav.contents {
+    margin: 0 0 2.6rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+  }
+  nav.contents a.chip {
+    text-decoration: none;
+    color: var(--ink);
+  }
+  nav.contents a.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  h2 { font-size: 1.4rem; margin: 2.6rem 0 1rem; color: var(--brass); }
+
+  table.cast {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .92rem;
+    margin: .5rem 0 1rem;
+  }
+  table.cast th, table.cast td {
+    text-align: left;
+    padding: .5rem .6rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  table.cast th {
+    font-size: .72rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 2px solid var(--rule-strong);
+  }
+  table.cast td code { white-space: nowrap; }
+
+  .timeline { position: relative; margin-top: 1rem; }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 17px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--rule-strong);
+  }
+  .chapter {
+    position: relative;
+    display: flex;
+    gap: 1.1rem;
+    margin-bottom: 2rem;
+    scroll-margin-top: 1rem;
+  }
+  .chapter .node {
+    position: relative;
+    z-index: 1;
+    flex: none;
+  }
+  .chapter .dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--node-bg);
+    color: var(--node-ink);
+    font-weight: 700;
+    font-size: .95rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .chapter .card {
+    flex: 1;
+    min-width: 0;
+    background: var(--card);
+    border: 1px solid var(--rule-strong);
+    border-radius: 8px;
+    padding: 1rem 1.2rem 1.2rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .chapter h3 { font-size: 1.15rem; font-weight: 650; margin: 0 0 .5rem; color: var(--ink); }
+  .files { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin: 0 0 .6rem; }
+  .files .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-right: .2rem; }
+  .size {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+  }
+  .size .add { color: var(--add); font-weight: 700; }
+  .size .del { color: var(--del); font-weight: 700; }
+  .size .sep { color: var(--muted); padding: 0 .1em; }
+  table.cast td.size-cell { white-space: nowrap; }
+  p.why {
+    margin: 0 0 .8rem;
+    font-size: .92rem;
+    color: var(--muted);
+  }
+  p.why strong { color: var(--ink); }
+  .narrative p { margin: .5rem 0; }
+  p.connects {
+    margin: .9rem 0 0;
+    font-size: .88rem;
+    color: var(--muted);
+    border-top: 1px dashed var(--rule);
+    padding-top: .6rem;
+  }
+  p.connects strong { color: var(--accent); }
+
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .875em;
+    background: var(--rail-bg);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: .1em .35em;
+    overflow-wrap: anywhere;
+  }
+  pre.code {
+    background: var(--rail-bg);
+    border: 1px solid var(--rule-strong);
+    border-radius: 6px;
+    padding: .85rem 1rem;
+    overflow-x: auto;
+    line-height: 1.5;
+    margin: .8rem 0;
+  }
+  pre.code code { background: none; border: none; padding: 0; font-size: .84rem; }
+
+  pre.diff {
+    background: var(--rail-bg);
+    border: 1px solid var(--rule-strong);
+    border-radius: 6px;
+    padding: .5rem 0;
+    overflow-x: auto;
+    line-height: 1.5;
+    margin: .8rem 0;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .84rem;
+  }
+  pre.diff .line { padding: 0 1rem; white-space: pre; }
+  pre.diff .add { background: var(--add-bg); color: var(--add); border-left: 3px solid var(--add); }
+  pre.diff .del { background: var(--del-bg); color: var(--del); border-left: 3px solid var(--del); }
+  pre.diff .add::before { content: "+ "; font-weight: 700; }
+  pre.diff .del::before { content: "\2212 "; font-weight: 700; }
+  pre.diff .ctx { color: var(--muted); border-left: 3px solid transparent; }
+  pre.diff .ctx::before { content: "\00a0\00a0"; }
+
+  section.extra { margin-top: 2.4rem; }
+  section.extra h2 { margin-top: 0; }
+  ul, ol { margin: .45rem 0; padding-left: 1.35rem; }
+  li { margin: .32rem 0; }
+  li::marker { color: var(--muted); }
+  ul.checklist { list-style: none; padding-left: 0; }
+  ul.checklist li {
+    padding-left: 1.6rem;
+    position: relative;
+  }
+  ul.checklist li::before {
+    content: "\2610";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Code walkthrough</p>
+    <h1>
+{{TITLE}}
+    </h1>
+    <p class="meta">
+      <span class="chip">
+{{REPO}}
+      </span>
+      <span class="chip">
+{{BRANCH}}
+      </span>
+      <span class="chip">
+{{DATE}}
+      </span>
+      <span class="chip" id="stat-files"></span>
+      <span class="chip" id="stat-chapters"></span>
+    </p>
+  </header>
+  <main id="doc"></main>
+</div>
+
+<pre id="doc-src" hidden>
+{{WALKTHROUGH_MD}}
+</pre>
+
+<script>
+(function () {
+  var esc = function (s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  var inline = function (s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>');
+  };
+  var slugify = function (s) {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  };
+  var renderSize = function (s) {
+    var m = s.match(/\+(\d+)\s*\/\s*-(\d+)/);
+    if (!m) return inline(s);
+    return '<span class="size"><span class="add">+' + m[1] + '</span>' +
+      '<span class="sep">/</span><span class="del">-' + m[2] + '</span></span>';
+  };
+
+  function splitTopSections(lines) {
+    var sections = [];
+    var cur = null;
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(/^##\s+(.+?)\s*$/);
+      if (m) {
+        if (cur) sections.push(cur);
+        cur = { title: m[1], lines: [] };
+      } else if (cur) {
+        cur.lines.push(lines[i]);
+      }
+    }
+    if (cur) sections.push(cur);
+    return sections;
+  }
+
+  function renderParagraphsAndLists(lines) {
+    var out = [];
+    var para = [];
+    var i = 0;
+    var flush = function () {
+      if (!para.length) return;
+      var text = para.join(' ').trim();
+      if (text) out.push('<p>' + inline(text) + '</p>');
+      para = [];
+    };
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^```/.test(line)) {
+        flush();
+        var buf = []; i++;
+        while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
+        i++;
+        out.push('<pre class="code"><code>' + esc(buf.join('\n')) + '</code></pre>');
+        continue;
+      }
+      if (/^\s*[-*]\s+/.test(line)) {
+        flush();
+        var items = [];
+        while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+          items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+          i++;
+        }
+        out.push('<ul class="checklist">' + items.map(function (it) { return '<li>' + inline(it) + '</li>'; }).join('') + '</ul>');
+        continue;
+      }
+      if (/^\s*$/.test(line)) { flush(); i++; continue; }
+      para.push(line); i++;
+    }
+    flush();
+    return out.join('\n');
+  }
+
+  function renderTable(lines) {
+    var rows = lines.filter(function (l) { return /^\s*\|/.test(l); });
+    if (rows.length < 2) return '';
+    var split = function (r) {
+      return r.trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); });
+    };
+    var header = split(rows[0]);
+    var sizeIdx = -1;
+    header.forEach(function (h, idx) { if (/^size$/i.test(h)) sizeIdx = idx; });
+    var body = rows.slice(2); // row[1] is the --- separator
+    var html = '<table class="cast"><thead><tr>' +
+      header.map(function (h) { return '<th>' + inline(h) + '</th>'; }).join('') +
+      '</tr></thead><tbody>';
+    var count = 0;
+    body.forEach(function (r) {
+      var cells = split(r);
+      if (cells.length < 2) return;
+      count++;
+      html += '<tr>' + cells.map(function (c, idx) {
+        return idx === sizeIdx ? '<td class="size-cell">' + renderSize(c) + '</td>' : '<td>' + inline(c) + '</td>';
+      }).join('') + '</tr>';
+    });
+    html += '</tbody></table>';
+    return { html: html, count: count };
+  }
+
+  function renderDiffBlock(body) {
+    var lines = body.split('\n');
+    var html = lines.map(function (l) {
+      var cls = 'ctx', text = l;
+      if (/^\+(?!\+\+)/.test(l)) { cls = 'add'; text = l.replace(/^\+/, ''); }
+      else if (/^-(?!--)/.test(l)) { cls = 'del'; text = l.replace(/^-/, ''); }
+      return '<div class="line ' + cls + '">' + esc(text) + '</div>';
+    }).join('');
+    return '<pre class="diff">' + html + '</pre>';
+  }
+
+  function renderChapters(lines) {
+    var chapters = [];
+    var cur = null;
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(/^###\s+(?:\d+[.)]\s*)?(.+?)\s*$/);
+      if (m) {
+        if (cur) chapters.push(cur);
+        cur = { title: m[1], lines: [] };
+      } else if (cur) {
+        cur.lines.push(lines[i]);
+      }
+    }
+    if (cur) chapters.push(cur);
+
+    var nav = [];
+    var body = [];
+    chapters.forEach(function (ch, idx) {
+      var n = idx + 1;
+      var id = 'ch-' + n;
+      nav.push('<a class="chip" href="#' + id + '">' + n + '. ' + inline(ch.title) + '</a>');
+
+      var files = '', why = '', connects = '', size = '';
+      var rest = [];
+      var cl = ch.lines;
+      var j = 0;
+      var out = [];
+      var para = [];
+      var flush = function () {
+        if (!para.length) return;
+        var text = para.join(' ').trim();
+        if (text) out.push('<p>' + inline(text) + '</p>');
+        para = [];
+      };
+      while (j < cl.length) {
+        var line = cl[j];
+        var fm = line.match(/^\*\*Files:\*\*\s*(.+)$/i);
+        var sm = line.match(/^\*\*Size:\*\*\s*(.+)$/i);
+        var wm = line.match(/^\*\*Why:\*\*\s*(.+)$/i);
+        var cm = line.match(/^\*\*Connects to:\*\*\s*(.+)$/i);
+        if (fm) { files = fm[1]; j++; continue; }
+        if (sm) { size = sm[1]; j++; continue; }
+        if (wm) { why = wm[1]; j++; continue; }
+        if (cm) { connects = cm[1]; j++; continue; }
+        if (/^```/.test(line)) {
+          flush();
+          var lang = line.replace(/^```/, '').trim().toLowerCase();
+          var buf = []; j++;
+          while (j < cl.length && !/^```/.test(cl[j])) buf.push(cl[j++]);
+          j++;
+          out.push(lang === 'diff' ? renderDiffBlock(buf.join('\n')) : '<pre class="code"><code>' + esc(buf.join('\n')) + '</code></pre>');
+          continue;
+        }
+        if (/^\s*$/.test(line)) { flush(); j++; continue; }
+        para.push(line); j++;
+      }
+      flush();
+
+      var filesHtml = '';
+      if (files) {
+        var sizeChip = size ? '<span class="chip">' + renderSize(size) + '</span>' : '';
+        filesHtml = '<p class="files"><span class="label">Files</span>' +
+          files.split(',').map(function (f) { return '<span class="chip">' + inline(f.trim()) + '</span>'; }).join('') +
+          sizeChip +
+          '</p>';
+      }
+      var whyHtml = why ? '<p class="why"><strong>Why:</strong> ' + inline(why) + '</p>' : '';
+      var connectsHtml = connects ? '<p class="connects"><strong>&rarr; Connects to:</strong> ' + inline(connects) + '</p>' : '';
+
+      body.push(
+        '<div class="chapter" id="' + id + '">' +
+          '<div class="node"><span class="dot">' + n + '</span></div>' +
+          '<div class="card">' +
+            '<h3>' + inline(ch.title) + '</h3>' +
+            filesHtml + whyHtml +
+            '<div class="narrative">' + out.join('\n') + '</div>' +
+            connectsHtml +
+          '</div>' +
+        '</div>'
+      );
+    });
+
+    return { navHtml: nav.join(''), bodyHtml: '<div class="timeline">' + body.join('\n') + '</div>', count: chapters.length };
+  }
+
+  var srcEl = document.getElementById('doc-src');
+  if (!srcEl) return;
+  var raw = srcEl.textContent.replace(/\r/g, '');
+  var lines = raw.split('\n');
+  var sections = splitTopSections(lines);
+
+  var main = document.getElementById('doc');
+  var fileCount = 0, chapterCount = 0;
+
+  sections.forEach(function (sec) {
+    var slug = slugify(sec.title);
+    if (slug === 'tl-dr' || slug === 'tldr') {
+      main.innerHTML += '<div class="tldr">' + renderParagraphsAndLists(sec.lines) + '</div>';
+    } else if (slug === 'cast-of-changes') {
+      var t = renderTable(sec.lines);
+      if (t) {
+        fileCount = t.count;
+        main.innerHTML += '<h2>' + inline(sec.title) + '</h2>' + t.html;
+      }
+    } else if (slug === 'timeline') {
+      var r = renderChapters(sec.lines);
+      chapterCount = r.count;
+      main.innerHTML += '<nav class="contents">' + r.navHtml + '</nav>' + r.bodyHtml;
+    } else {
+      main.innerHTML += '<section class="extra"><h2>' + inline(sec.title) + '</h2>' + renderParagraphsAndLists(sec.lines) + '</section>';
+    }
+  });
+
+  var fEl = document.getElementById('stat-files');
+  var cEl = document.getElementById('stat-chapters');
+  if (fEl) fEl.textContent = fileCount ? (fileCount + (fileCount === 1 ? ' file' : ' files')) : '';
+  if (cEl) cEl.textContent = chapterCount ? (chapterCount + (chapterCount === 1 ? ' chapter' : ' chapters')) : '';
+})();
+</script>

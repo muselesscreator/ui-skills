@@ -58,3 +58,14 @@ Write `$OUT/commit-report-$TS.md` with:
 - anything intentionally left unstaged
 
 Finish by printing the hash + subject.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. Put the commit hash in the
+# summary — the retro's rework detection joins the cycle to the branch by commit.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append commit "PASS|FAIL|BLOCKED" "<commit-report path just written, or ->" \
+  "<one sentence, including the short hash>" "<anything left unstaged, or ->" "-"
+```

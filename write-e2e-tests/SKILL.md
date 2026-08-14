@@ -114,3 +114,14 @@ mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
 ```
 
 Write this report to `~/.claude/skill-output/$REPO/$BRANCH/write-e2e-tests-report-$TS.md`.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. Pass the report path you
+# just wrote — the $TS above is not in scope in this fresh shell.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append e2e "PASS|FAIL|BLOCKED" "<report path just written, or ->" \
+  "<one-sentence summary>" "<remaining coverage gaps, or ->" "-"
+```

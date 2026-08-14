@@ -79,11 +79,11 @@ if [ -n "$FILTERS" ]; then pnpm $FILTERS type-check 2>&1 | tee "$OUT/type-check-
 else pnpm type-check 2>&1 | tee "$OUT/type-check-output.txt"; fi
 ```
 
-**Scope discipline — read this before touching anything below.** Only fix errors in files listed in `$OUT/cleanup-scope-changed.txt` (Step 2's changed-file list). If an error surfaces in a file that is NOT in that list, it is pre-existing/out-of-scope: name it in the report as a residual, do not edit it. Editing a file outside the change set is itself the failure mode this rule exists to prevent — "the fix touched 16 files the branch never asked about" is not a smaller version of success, it's the incident this rule was written after.
+**Scope discipline — read this before touching anything below.** Only fix errors in files listed in `$OUT/cleanup-scope-changed.txt` (Step 2's changed-file list). If an error surfaces in a file that is NOT in that list, it is pre-existing/out-of-scope: name it in the report as a residual, do not edit it. Editing a file outside the change set is the failure mode this rule prevents, not a broader version of success (`RATIONALE.md`).
 
 For each in-scope type error: read the file, understand the error, apply the fix. Do not use `as` casts or `any` to silence errors — fix the underlying type issue.
 
-**NEVER remove an existing type assertion (`as X`, non-null `!`), an `eslint-disable` comment, or any other existing suppression as the fix for an error you're seeing — even in an in-scope file.** If one now *looks* redundant (the types on both sides appear to already match without it), that is far more likely a symptom of Step 1's preflight not actually being clean for this exact spot — a stale build cache, a partially-regenerated client, a project-reference not rebuilt — than a genuinely dead guard. An assertion bridging a real Prisma-type-vs-domain-type gap, or a disable suppressing a rule that only fires under typed-linting, will pass a broken environment's check the moment you delete it and then break the instant the environment is fixed — silently, because nothing caught it at delete-time. Before removing any pre-existing assertion or disable comment: confirm Step 1 passed clean in *this* run, then re-derive why it looks unnecessary (e.g. "this branch's ternary now narrows the type upstream, so the downstream assertion really is dead") and say so in the report. Never delete one just because the error you're chasing would go away.
+**NEVER remove an existing type assertion (`as X`, non-null `!`), an `eslint-disable` comment, or any other existing suppression as the fix for an error you're seeing — even in an in-scope file.** A suppression that now *looks* redundant is usually a symptom of Step 1's preflight not being clean for that exact spot (stale build cache, partially-regenerated client, project-reference not rebuilt), not a dead guard (`RATIONALE.md`). Before removing any pre-existing assertion or disable comment: confirm Step 1 passed clean in *this* run, then state in the report why it is genuinely dead (e.g. "this branch's ternary now narrows the type upstream"). Never delete one just because the error you're chasing would go away.
 
 **NEVER prefix unused variables with `_` to suppress errors.** If something is unused, delete it. Underscore-prefixed dead code is still dead code — it creates false impressions that the variable is intentionally unused-but-kept, which causes future bugs and confusion.
 
@@ -224,3 +224,15 @@ echo "$OUT/cleanup-ui-report-$TS.md"   # ← write the report to this exact path
 ```
 
 Write this report to the path echoed above.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. A Step-1 environment block
+# is BLOCKED here, not FAIL — that distinction is what keeps a toolchain problem
+# from being read as a skill defect in the retro.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append cleanup "PASS|FAIL|BLOCKED" "<cleanup-ui-report path just written, or ->" \
+  "<one-sentence summary>" "<residual lint/type failures left out of scope, or ->" "<decision memo ids, or ->"
+```

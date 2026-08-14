@@ -45,6 +45,7 @@ constant is worse than an honest token count.
 """
 
 import argparse
+import calendar
 import collections
 import glob
 import json
@@ -270,6 +271,42 @@ def find_cycle_dirs(repo=None, branch=None):
     return found
 
 
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def short_cycle_id(cid):
+    """A UUID shortens to 8 chars; a runlog stem must not. `20260616-171839` and
+    `20260616-152318` are different cycles sharing their first 8 characters, so
+    blind truncation prints an ambiguous id in the very report meant to name it."""
+    if not cid:
+        return "?"
+    return cid[:8] if UUID_RE.fullmatch(cid) else cid
+
+
+def runlog_stem(path):
+    """`orch-run-20260803-102745-e209275a.md` → `20260803-102745-e209275a`, the id
+    `list` prints and `report <id>` resolves."""
+    return re.sub(r"^orch-run-|\.md$", "", os.path.basename(path))
+
+
+def find_runlogs(repo=None, branch=None):
+    """Runlog cycles: /orch-ui in-session runs, and lib/runlog.sh's per-session log
+    for skills invoked by hand. Repo/branch come from the path, since a runlog
+    carries no manifest (and the path segment is the dashed branch key)."""
+    pattern = os.path.join(SKILL_OUTPUT, repo or "*", branch or "*", "orch-run-*.md")
+    found = []
+    for f in glob.glob(pattern):
+        try:
+            rl = parse_runlog(f)
+        except OSError:
+            continue
+        parts = f.split(os.sep)
+        rl["repo"], rl["branch"] = parts[-3], parts[-2]
+        found.append((f, rl))
+    found.sort(key=lambda x: x[1].get("createdAt") or 0, reverse=True)
+    return found
+
+
 def all_cycle_sessions(repo, branch):
     """sessionId → cycle id, for EVERY cycle ever run on this repo+branch.
 
@@ -326,6 +363,20 @@ def previous_cycle_end(repo, branch, before_ms):
         end = man.get("finishedAt") or man.get("updatedAt") or created
         if best is None or end > best[0]:
             best = (end, man.get("id"), man.get("cycle"))
+    # Runlogs count as predecessors too. A hand-run cycle exists only as a runlog,
+    # and runlog.sh scopes one per session, so consecutive hand-run cycles on a
+    # branch are the common case — reading only manifests here would floor every
+    # one of them at the 72h lookback and forfeit the inter-cycle attribution that
+    # makes retros compound.
+    for f, rl in find_runlogs(repo):
+        if (rl.get("branch") or "").replace("/", "-") != (branch or "").replace("/", "-"):
+            continue
+        created = rl.get("createdAt") or 0
+        if created >= before_ms:
+            continue
+        end = rl.get("finishedAt") or created
+        if best is None or end > best[0]:
+            best = (end, runlog_stem(f), rl.get("cycle") or "runlog")
     return {"end_ms": best[0], "cycle_id": best[1], "cycle": best[2]} if best else None
 
 
@@ -401,21 +452,41 @@ def parse_status_block(text):
 
 
 def parse_runlog(path):
-    """Parse an in-session /orch-ui runlog into the same shape as a manifest.
-    No cost data exists on this surface — that gap is reported, not guessed."""
+    """Parse a runlog into the same shape as a manifest. Two writers produce this
+    surface: /orch-ui in-session, and lib/runlog.sh for manually invoked skills.
+    No cost data exists on this surface — that gap is reported, not guessed.
+
+    Every pattern here is tolerant of BOTH writers' formats. The original regexes
+    required a two-token header, `**Task:**`, and a status on the `###` heading;
+    real /orch-ui runlogs write a one-token header, `- Task:`, and a bare `###
+    <id>` with STATUS on the next line, so they parsed as zero steps with no
+    cycle type and no task — the surface was nominally supported but extracted
+    nothing."""
     text = open(path, errors="ignore").read()
-    head = re.match(r"#\s*orch-ui run\s*—\s*(\S+)\s*—\s*(\S+)", text)
-    task = re.search(r"\*\*Task:\*\*\s*(.*?)(?:\n\n|\n##)", text, flags=re.S)
+    # Header: `# orch-ui run — <cycle>` with an optional second `— <repo/branch>`.
+    head = re.match(r"#\s*orch-ui run\s*[—-]\s*([^\s—]+)", text)
+    # Task/Started lines are model-written, so accept `**Task:**`, `- Task:`, and
+    # a bare `Task:` — all three appear across existing runlogs on disk.
+    task = re.search(r"^(?:\*\*Task:\*\*|-\s*Task:|Task:)\s*(.+?)\s*$", text, flags=re.M)
     steps = []
-    for m in re.finditer(r"^###\s+(\S+)\s*—\s*(.+?)$(.*?)(?=^###|\Z)", text, flags=re.S | re.M):
-        body = m.group(3)
+    # Heading: `### <id>`, optionally numbered (`### 1. plan`) and optionally
+    # carrying the status (`### impl — PASS`). Split the status on a SPACED dash
+    # only, so a hyphenated id like `impl-2` survives.
+    for m in re.finditer(r"^###\s+(.+?)\s*$(.*?)(?=^###|\Z)", text, flags=re.S | re.M):
+        heading, body = m.group(1).strip(), m.group(2)
+        heading = re.sub(r"^\d+[.)]\s*", "", heading)
+        parts = re.split(r"\s+[—-]\s+", heading, 1)
+        step_id = parts[0].strip()
         fields = parse_status_block(body)
+        status = fields.get("STATUS") or (parts[1] if len(parts) > 1 else "") or ""
+        # Free-form tails ("PASS — committed on …") keep only the verdict.
+        status = re.split(r"\s+[—-]\s+", status.strip(), 1)[0].strip().lower()
         steps.append(
             {
-                "id": m.group(1),
+                "id": step_id,
                 "skill": None,
                 "model": None,
-                "status": (fields.get("STATUS") or m.group(2)).strip().lower(),
+                "status": status or None,
                 "attempts": 1,
                 "artifact": fields.get("ARTIFACT"),
                 "summary": fields.get("SUMMARY"),
@@ -425,14 +496,28 @@ def parse_runlog(path):
         )
     spawns = collections.Counter(re.findall(r"^SPAWN:\s*(\S+)", text, flags=re.M))
     st = os.stat(path)
+    mtime_ms = int(st.st_mtime * 1000)
+    # `- Started:` is the cycle's real start. mtime is the LAST append, so using it
+    # for createdAt opened the window at the end of the run and misfiled every
+    # session that ran during it as the previous cycle's leak.
+    created_ms = None
+    started = re.search(r"^(?:-\s*Started:|Started:)\s*(\S+)", text, flags=re.M)
+    if started:
+        raw = started.group(1)
+        created_ms = _iso_ms(raw)
+        if created_ms is None:  # legacy compact local stamp: 20260622-161517
+            try:
+                created_ms = int(time.mktime(time.strptime(raw, "%Y%m%d-%H%M%S")) * 1000)
+            except ValueError:
+                created_ms = None
     return {
         "surface": "runlog",
         "runlog": path,
         "cycle": head.group(1) if head else None,
         "task": " ".join((task.group(1) if task else "").split())[:400],
         "status": None,
-        "createdAt": int(st.st_mtime * 1000),
-        "finishedAt": int(st.st_mtime * 1000),
+        "createdAt": created_ms or mtime_ms,
+        "finishedAt": mtime_ms,
         "steps": steps,
         "spawns": dict(spawns),
         "cost_available": False,
@@ -445,21 +530,32 @@ def parse_runlog(path):
 def build_report(target, lookback_hours=DEFAULT_LOOKBACK_HOURS):
     if target.endswith(".md") and os.path.isfile(target):
         return report_runlog(target, lookback_hours)
-    return report_cycle_dir(resolve_cycle(target), lookback_hours)
+    kind, loc = resolve_cycle(target)
+    return (report_runlog if kind == "runlog" else report_cycle_dir)(loc, lookback_hours)
 
 
 def resolve_cycle(target):
+    """Resolve a target across BOTH surfaces, returning (kind, location).
+
+    Runlogs are first-class here, not a fallback: a cycle run by hand (each skill
+    logging itself via lib/runlog.sh) exists only as a runlog, so resolving only
+    cycle dirs would make manually-run work permanently unanalyzable — and
+    `latest` would silently skip a runlog newer than the newest manifest."""
     if os.path.isdir(target) and os.path.exists(os.path.join(target, "manifest.json")):
-        return target
-    cycles = find_cycle_dirs()
-    if not cycles:
-        sys.exit("no cycle dirs found under " + SKILL_OUTPUT)
+        return ("cycle-dir", target)
+    entries = [("cycle-dir", d, man.get("createdAt") or 0, os.path.basename(d))
+               for d, man in find_cycle_dirs()]
+    entries += [("runlog", f, rl.get("createdAt") or 0, runlog_stem(f))
+                for f, rl in find_runlogs()]
+    if not entries:
+        sys.exit("no cycles or runlogs found under " + SKILL_OUTPUT)
+    entries.sort(key=lambda e: e[2], reverse=True)
     if target in ("latest", "-", ""):
-        return cycles[0][0]
-    for d, _man in cycles:
-        if os.path.basename(d).startswith(target):
-            return d
-    sys.exit("no cycle matching %r (try: cycle-forensics.py list)" % target)
+        return (entries[0][0], entries[0][1])
+    for kind, loc, _created, ident in entries:
+        if ident.startswith(target):
+            return (kind, loc)
+    sys.exit("no cycle or runlog matching %r (try: cycle-forensics.py list)" % target)
 
 
 def report_cycle_dir(cycle_dir, lookback_hours):
@@ -542,26 +638,102 @@ def report_runlog(path, lookback_hours):
     rep = parse_runlog(path)
     out_dir = os.path.dirname(path)
     parts = out_dir.split(os.sep)
+    text = open(path, errors="ignore").read()
+    branch_key = parts[-1] if parts else None
+    # Worktree and branch were hardcoded None here, so attach_sessions got no
+    # project dir and branch_commits was never called — the runlog surface produced
+    # a step ledger and NOTHING else: no sessions, no rework, no leak record, which
+    # is most of what a post-mortem is for. runlog.sh now records the worktree; for
+    # a legacy /orch-ui runlog that predates that, fall back to the repo's checkout.
+    worktree = _header_field(text, "Worktree")
+    if not worktree:
+        worktree = guess_worktree(parts[-2] if len(parts) >= 2 else None, branch_key)
+    branch = real_branch(worktree, branch_key, _header_field(text, "Branch"))
     rep.update(
         {
-            "cycle_id": os.path.basename(path),
+            "cycle_id": runlog_stem(path),
             "cycle_dir": None,
             "repo": parts[-2] if len(parts) >= 2 else None,
-            "branch_key": parts[-1] if parts else None,
-            "branch": None,
-            "worktree": None,
+            "branch_key": branch_key,
+            "branch": branch,
+            "worktree": worktree,
             "output_dir": out_dir,
             "runs": [],
             "total_cost_usd": None,
+            "created_ms": rep.get("createdAt"),
+            "finished_ms": rep.get("finishedAt"),
         }
     )
     rep["artifacts"] = inventory(None, out_dir)
     # The orchestrating session is whichever transcript mentions this runlog.
     owners = grep_transcripts(os.path.basename(path))
     rep["orchestrator_sessions"] = owners
-    attach_sessions(rep, set(owners), lookback_hours, branch_hint=rep["branch_key"])
+    attach_sessions(rep, set(owners), lookback_hours, branch_hint=branch_key)
+    rep["commits"] = branch_commits(worktree, branch, rep.get("created_ms"),
+                                   rep.get("finished_ms"),
+                                   (rep.get("previous_cycle") or {}).get("end_ms"))
+    rep["live_rework"] = live_rework(rep.get("cycle_sessions") or [],
+                                    rep.get("unlinked_sessions") or [])
+    rep["working_tree"] = working_tree(worktree)
     rep["anomalies"] = flag_anomalies(rep)
     return rep
+
+
+def _header_field(text, name):
+    m = re.search(r"^(?:-\s*|\*\*)?%s:?\*?\*?:?\s*(.+?)\s*$" % re.escape(name), text, flags=re.M)
+    return m.group(1).strip() if m else None
+
+
+def real_branch(worktree, branch_key, header_branch):
+    """The branch's REAL name. Both the output-dir path segment and /orch-ui's
+    `- Branch:` line carry skill-env's dashed key, but sessions record the real
+    name and branch_commits uses it as a git ref — so `bw-conflicts-in-sidebar`
+    silently matched no sessions and resolved to no commits. Invert the key by
+    asking the checkout which of its branches dashes to it."""
+    if header_branch and "/" in header_branch:
+        return header_branch
+    if worktree and os.path.isdir(worktree) and branch_key:
+        try:
+            out = subprocess.run(["git", "-C", worktree, "branch", "--all",
+                                  "--format=%(refname:short)"],
+                                 capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        for name in (n.strip() for n in out.splitlines()):
+            name = re.sub(r"^origin/", "", name)
+            if name and name.replace("/", "-") == branch_key:
+                return name
+    return header_branch or branch_key
+
+
+def guess_worktree(repo, branch_key):
+    """Best-effort worktree for a runlog that never recorded one: the checkout whose
+    transcripts are filed under a project dir naming this repo, preferring one
+    currently on this branch. Returns None rather than a wrong path — a bad cwd
+    would silently attribute another checkout's sessions to this cycle."""
+    if not repo:
+        return None
+    candidates = []
+    for d in sorted(glob.glob(os.path.join(PROJECTS, "*"))):
+        if not os.path.isdir(d) or repo not in os.path.basename(d):
+            continue
+        for f in glob.glob(os.path.join(d, "*.jsonl"))[:5]:
+            for line in _lines(f, limit=60):
+                cwd = line.get("cwd")
+                if cwd and os.path.isdir(cwd):
+                    candidates.append(cwd)
+                    break
+            if candidates:
+                break
+    for cwd in candidates:
+        try:
+            cur = subprocess.run(["git", "-C", cwd, "branch", "--show-current"],
+                                 capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if branch_key and cur.strip().replace("/", "-") == branch_key:
+            return cwd
+    return candidates[0] if candidates else None
 
 
 def grep_transcripts(needle):
@@ -718,7 +890,7 @@ def attach_sessions(rep, cycle_session_ids, lookback_hours=72, branch_hint=None)
         # Attribution: a session in the inter-cycle gap is the PREVIOUS cycle's
         # leak, not this one's. Without this split a retro would blame itself for
         # work that happened before it started.
-        rec["attributed_to"] = ("previous-cycle (%s)" % (prev["cycle_id"][:8] if prev else "?")
+        rec["attributed_to"] = ("previous-cycle (%s)" % (short_cycle_id(prev["cycle_id"]) if prev else "?")
                                 if rec["when"] == "inter-cycle" else "this-cycle")
 
         if s["session_id"] in cycle_session_ids:
@@ -821,9 +993,14 @@ def working_tree(worktree):
 
 
 def _iso_ms(iso):
+    # Transcript timestamps are UTC (trailing Z), so convert as UTC. mktime()
+    # reads the naive struct as LOCAL and applies the DST offset in effect, while
+    # time.timezone is the STANDARD offset — during DST the two disagree by an
+    # hour, which silently shifted every session an hour early and misfiled
+    # during/inter-cycle/after attribution.
     try:
         t = time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")
-        return int((time.mktime(t) - time.timezone) * 1000)
+        return int(calendar.timegm(t) * 1000)
     except (ValueError, TypeError):
         return None
 
@@ -1198,7 +1375,7 @@ def render_report(rep):
     p("Scan window opens at **%s** (%s)%s, and stays open to **now** — a cycle still"
       % (time.strftime("%Y-%m-%d %H:%M", time.localtime((rep.get("scan_floor_ms") or 0) / 1000)),
          rep.get("scan_floor_source") or "?",
-         " — previous cycle `%s` (%s)" % (prev["cycle_id"][:8], prev.get("cycle")) if prev else ""))
+         " — previous cycle `%s` (%s)" % (short_cycle_id(prev["cycle_id"]), prev.get("cycle")) if prev else ""))
     p("running has no end, so nothing is misfiled as `after`.")
     p("")
     p("`inter-cycle` = ran between the previous cycle's end and this cycle's start;")
@@ -1347,15 +1524,45 @@ def render_history(h):
     return "\n".join(L)
 
 
-def render_list(cycles):
-    L = ["| cycle | when | repo/branch | type | status | steps | cost | dir |", "|---|---|---|---|---|---|---|---|"]
-    for cdir, man in cycles:
+def list_entries(repo=None, branch=None):
+    """Both surfaces in one time-sorted list. Previously runlogs were printed only
+    when NO cycle dir existed anywhere, so on a machine with any dev-screen history
+    a hand-run cycle's runlog was never listed — and /analyze-cycle resolves its
+    target from this list, so that work was untrackable no matter what wrote it."""
+    rows = []
+    for cdir, man in find_cycle_dirs(repo, branch):
         runs = load_runs(cdir)
+        rows.append({
+            "id": (man.get("id") or os.path.basename(cdir))[:8],
+            "created": man.get("createdAt") or 0,
+            "repo": man.get("repo"), "branch": man.get("branch"),
+            "cycle": man.get("cycle"), "status": man.get("status"),
+            "steps": len(man.get("steps") or []),
+            "cost": fmt_money(_sum(r.get("cost_usd") for r in runs)),
+            "loc": cdir,
+        })
+    for f, rl in find_runlogs(repo, branch):
+        rows.append({
+            "id": runlog_stem(f),
+            "created": rl.get("createdAt") or 0,
+            "repo": rl.get("repo"), "branch": rl.get("branch"),
+            "cycle": rl.get("cycle") or "runlog", "status": "runlog",
+            "steps": len(rl.get("steps") or []),
+            "cost": "—",
+            "loc": f,
+        })
+    rows.sort(key=lambda r: r["created"], reverse=True)
+    return rows
+
+
+def render_list(rows):
+    L = ["| cycle | when | repo/branch | type | status | steps | cost | location |",
+         "|---|---|---|---|---|---|---|---|"]
+    for r in rows:
         L.append("| %s | %s | %s/%s | %s | %s | %s | %s | `%s` |" % (
-            (man.get("id") or os.path.basename(cdir))[:8],
-            time.strftime("%Y-%m-%d %H:%M", time.localtime((man.get("createdAt") or 0) / 1000)),
-            man.get("repo"), man.get("branch"), man.get("cycle"), man.get("status"),
-            len(man.get("steps") or []), fmt_money(_sum(r.get("cost_usd") for r in runs)), cdir))
+            r["id"],
+            time.strftime("%Y-%m-%d %H:%M", time.localtime(r["created"] / 1000)) if r["created"] else "—",
+            r["repo"], r["branch"], r["cycle"], r["status"], r["steps"], r["cost"], r["loc"]))
     return "\n".join(L)
 
 
@@ -1390,14 +1597,11 @@ def main():
     a = ap.parse_args()
 
     if a.cmd == "list":
-        cycles = find_cycle_dirs(a.repo, a.branch)[: a.limit]
-        if not cycles:
-            print("no cycle dirs found under %s" % SKILL_OUTPUT)
-            print("in-session /orch-ui runs instead leave runlogs:")
-            for f in sorted(glob.glob(os.path.join(SKILL_OUTPUT, "*", "*", "orch-run-*.md")), reverse=True)[:20]:
-                print("  %s" % f)
+        rows = list_entries(a.repo, a.branch)[: a.limit]
+        if not rows:
+            print("no cycles or runlogs found under %s" % SKILL_OUTPUT)
             return
-        print(render_list(cycles))
+        print(render_list(rows))
     elif a.cmd == "report":
         rep = build_report(a.target, a.lookback_hours)
         print(json.dumps(rep, indent=1, default=str) if a.json else render_report(rep))

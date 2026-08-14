@@ -81,6 +81,7 @@ Using the test context from Step 1:
 - Mock everything external to the unit under test
 - Do not test framework code, trivial getters, or TypeScript-enforced invariants
 - Async tests use the project's established async pattern (not invented `waitFor` usage)
+- **Fixture values for enumerated or generated domain data must come from a real production source, quoted.** For a field type, enum member, slug, or config key, grep the generated/definition files for the literal you are about to hard-code and cite one real occurrence in a comment. If the literal appears zero times, the code under test is wrong — report that, do not invent a fixture that makes it pass.
 
 ## Step 6: Verify
 
@@ -90,6 +91,8 @@ pnpm test {test-file-path} --run 2>&1 | tail -30
 ```
 
 If tests fail: diagnose and fix before reporting success.
+
+**Prove each new test can fail.** For every guard, filter, or predicate the test exists to pin, neutralise it in the source, re-run, and confirm the expected test fails; then restore. Report the mutation and the failure count. A test that passes with its subject removed is not coverage — say so rather than counting it.
 
 ## Step 7: Report
 
@@ -111,3 +114,14 @@ mkdir -p ~/.claude/skill-output/$REPO/$BRANCH
 ```
 
 Write this report to `~/.claude/skill-output/$REPO/$BRANCH/write-unit-tests-report-$TS.md`.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. Pass the report path you
+# just wrote — the $TS above is not in scope in this fresh shell.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append tests "PASS|FAIL|BLOCKED" "<report path just written, or ->" \
+  "<one-sentence summary>" "<remaining coverage gaps, or ->" "-"
+```

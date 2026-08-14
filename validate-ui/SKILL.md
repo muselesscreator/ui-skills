@@ -54,13 +54,13 @@ git diff --name-only "$(git merge-base HEAD "$BASE")"..HEAD
 git diff --stat "$(git merge-base HEAD "$BASE")"..HEAD | tail -1
 ```
 
-**Scope the tree check to the plan's files.** Validation reads the committed diff above. If you also need to reason about *uncommitted* work, do not scan the whole tree:
+**Scope the tree check to the plan's files.** Validation reads the committed diff above. For *uncommitted* work, use the script instead of scanning the tree:
 
 ```bash
 ~/.claude/skills/lib/plan-scope-check.sh   # exit 1 + paths = real collision; exit 0 = clear
 ```
 
-Treat only a non-empty result as in scope, and quote exactly those paths. Unrelated concurrent work on a shared branch is not a validation finding and is not grounds for a memo — on `dev-screen/home-cleanup` two opus attempts were spent reporting "three streams of unrelated concurrent work share the uncommitted tree", which was true and irrelevant.
+Only a non-empty result is in scope; quote exactly those paths. Unrelated concurrent work on a shared branch is not a validation finding and not grounds for a memo (`RATIONALE.md`).
 
 **Size gate — do not read a large diff inline.** This skill runs on opus in the feature cycle; it is the most expensive context in the suite to bloat, and reading every changed file breaks the context budget the rest of the pipeline protects.
 
@@ -81,19 +81,15 @@ Compare spec against implementation **from the user's perspective** — not from
 2. **Are there gaps?**
    - Requirements that are partially implemented
    - Happy path works but edge cases are missing
-   - Feature works but is not accessible (missing ARIA, keyboard navigation)
+   - Feature works but is not accessible (missing ARIA, keyboard navigation). If the change adds an icon-only or colour-carried state, resolve the token to its hex, compute the ratio against every background it renders on, and check the 3:1 WCAG 1.4.11 floor. Prefer the token an existing sibling component already uses for the same state over a fresh choice — an accessible name does not discharge this.
 
 3. **Are there unrequested changes?**
    - Changes to files not related to the feature
-   - Behavior changes in existing functionality
+   - Behavior changes in existing functionality. **A file being named in the plan does not make its behaviour changes requested.** For every function the diff modifies rather than adds, diff it against `$BASE` and count its call sites (`git grep -c`); a changed shared helper is an unrequested change to every caller the request never mentioned. Name the call-site count in the finding.
    - New dependencies or global state changes that weren't requested
    - Refactors that weren't asked for (even if they look like improvements)
 
-   Each one is a judgment call, not a fact — route it through a decision memo rather than settling it unilaterally or leaving it as unresolved prose (AUTHORING.md § Decision memos & per-repo review heuristics):
-   - **Dedupe before raising**: `~/.claude/skills/lib/decide.sh list open` first; if an open memo already covers this change, reference its id instead of raising a near-duplicate.
-   - **New finding**: get the next id (`~/.claude/skills/lib/decide.sh next-id`) and Write a memo to `$OUT/decisions/d{NNN}-validate-ui-{slug}.md` — frontmatter `id, title, status: open, raised_by: validate-ui, raised_at, resolution:` (empty), then a body: the change and why it reads as unrequested, lettered options (e.g. `A) keep — intentional`, `B) revert`, `C) split into a separate change`) with a recommendation first.
-   - **Running interactively** (AskUserQuestion available): present the memo's options via AskUserQuestion right away, then `~/.claude/skills/lib/decide.sh resolve <id>` with the chosen answer piped on stdin — the memo doubles as a decision log even when answered immediately.
-   - **Running isolated** (no AskUserQuestion — e.g. spawned as an `/orch-ui` subagent): never attempt AskUserQuestion. Leave the memo `open`, cite it by id in the report, and treat this run as blocked in your final summary — a wrapping subagent should reply `STATUS: BLOCKED` and list the id(s) under `DECISIONS:` per orch-ui's subagent contract, not `PASS`/`FAIL`.
+   Each one is a judgment call, not a fact — raise it as a decision memo rather than settling it unilaterally or leaving it as unresolved prose. Follow **AUTHORING.md § Decision memos** for the lifecycle, id allocation, and dedupe-before-raise. This skill's specifics: `raised_by: validate-ui`, options `A) keep — intentional` / `B) revert` / `C) split into a separate change`. Spawned as an `/orch-ui` subagent you have no AskUserQuestion — leave the memo open, cite the id, and report `BLOCKED`.
 
 ## Step 4: Check for Tests
 
@@ -104,18 +100,20 @@ Are the required tests present?
 
 ## Step 5: Output Validation Report
 
-The report opens with machine-consumable frontmatter so the orch remediation loop can read the verdict and counts without parsing prose, followed by the human-readable body:
+Write the body in the shape below, then generate the machine-consumable frontmatter with the script — the verdict, the counts, and the human-only-gap rule are arithmetic, not judgment:
+
+```bash
+~/.claude/skills/lib/validation-verdict.sh <body-file> [--human-only-gaps N]
+```
+
+Your judgment is *which* findings earn a mark. A `✗`/`⚠` is for missing or partial coverage of a new or substantially-changed stateful component or hook central to this feature — not a blanket "no E2E for the whole app". Pass `--human-only-gaps N` = how many marks are mandated manual/visual/in-browser checks with no automation surface in this environment (no browser automation, no E2E runner, no component test runner — verify it, don't assume). The script honors that only when *every* remaining gap is one, and then emits `blocked: true`: report `STATUS: BLOCKED` citing the memo id, never `FAIL`, so `orch-ui` routes it to the human instead of spending a remediation round on it (`RATIONALE.md`).
+
+Body shape (the frontmatter above it comes from the script):
 
 ```
----
-verdict: COMPLETE | GAPS FOUND | OUT OF SCOPE CHANGES
-gaps: {n}
-unrequested: {n}
----
-
 ## Validation Report: {feature name}
 
-**Verdict: COMPLETE | GAPS FOUND | OUT OF SCOPE CHANGES**
+**Verdict: {the verdict the script emitted}**
 
 ### Requirements Check
 
@@ -144,9 +142,7 @@ unrequested: {n}
 {1-2 sentences on overall status and what to address before this is done. If any decision memo from Step 3 is still open, say so explicitly here.}
 ```
 
-`gaps` = count of `✗` and `⚠` lines across Requirements Check + Implicit Requirements + Test Coverage, when the missing/partial coverage is for a new or substantially-changed stateful component or hook central to this feature (not a blanket "no E2E for the whole app" note, and not covered by the Human-only gap exception below). `unrequested` = count of entries under Unrequested Changes (memoed or already resolved). Verdict: `GAPS FOUND` if `gaps > 0` (regardless of `unrequested` — a missing requirement is more severe than an open scope question); else `OUT OF SCOPE CHANGES` if `unrequested > 0`; else `COMPLETE`.
-
-**Human-only gap exception.** If *every* remaining `✗`/`⚠` gap is a mandated manual, visual, or in-browser pass with no automation surface in this environment — verify it: no browser automation tool, no E2E runner, no component test runner installed — do not verdict `GAPS FOUND`. Raise it as a decision memo (Step 3's dedupe rule first) and report `STATUS: BLOCKED` citing that memo id, never `FAIL`. `orch-ui`'s `remediate` fires only on `FAIL`, so `BLOCKED` routes the gap to the human instead of spending a remediation round on work no code change can do. This exception requires zero remaining code-level gaps — a single fixable `✗` means the normal `GAPS FOUND` rule still applies.
+Prepend the script's frontmatter to that body and write the whole thing to:
 
 ```bash
 source ~/.claude/skills/lib/skill-env.sh
@@ -154,3 +150,14 @@ echo "$OUT/validation-report-$TS.md"   # ← write the report to this exact path
 ```
 
 Write this report to the path echoed above so the next agent can read the verdict and act on gaps or unrequested changes.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Silently no-ops when a cycle runner already
+# logs this step. Guards + rationale: lib/runlog.sh. STATUS carries the verdict:
+# COMPLETE -> PASS; gaps found -> FAIL; an open decision memo -> BLOCKED.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append validate "PASS|FAIL|BLOCKED" "<validation-report path just written, or ->" \
+  "<one-sentence verdict>" "<gaps or unrequested changes to address, or ->" "<decision memo ids, or ->"
+```

@@ -191,3 +191,16 @@ Ready for /plan-ui — it will read analysis-latest.md, discover affected files,
 ```
 
 Do not restate the artifact. This step is fact-gathering only — surface no approach, no recommendation, no plan.
+
+```bash
+# Record this run in the session runlog, so a skill invoked BY HAND is still a
+# cycle /analyze-cycle can resolve. Before this, only dev-screen runs (manifest +
+# run files) and /orch-ui runs (its own runlog) left any cycle record at all.
+# Silently no-ops when a cycle runner already logs this step. Guards + rationale:
+# lib/runlog.sh. Re-sourcing skill-env.sh re-stamps $TS, so pass the artifact
+# path you actually wrote — do not rebuild it from $TS here.
+source ~/.claude/skills/lib/skill-env.sh
+source ~/.claude/skills/lib/runlog.sh
+runlog_append analyze "PASS|FAIL|BLOCKED" "<artifact path just written, or ->" \
+  "<one-sentence summary>" "<followup, or ->" "<decision memo ids, or ->"
+```

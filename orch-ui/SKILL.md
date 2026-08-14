@@ -30,7 +30,7 @@ Do this **before touching anything**. Never run a step until the user has confir
    - If the first token exactly matches a cycle `name`, take that as the cycle and treat the remainder as `$TASK`.
    - Otherwise, if `$ARGUMENTS` is non-empty, pick the best-matching cycle by description and treat the whole string as `$TASK`.
    - If `$ARGUMENTS` is empty or the match is unclear, make no assumption.
-2b. **Normalise `$TASK` to the bare requirement** before substituting it anywhere. Strip any leading skill-invocation preamble — `Invoke the <skill> skill with arguments:`, `/<skill>`, `run <skill> on`, `use <skill> to`. Steps that treat `$TASK` as the requirements spec (`validate-ui`) will otherwise grade the implementation against an instruction to invoke a skill: on `dev-screen/home-cleanup` all three of analyze/plan/validate received `args` beginning "Invoke the analyze-task skill with arguments: …". Strip only a leading preamble, never text that could be a requirement, and show the normalised task in the confirmation below so the user can correct it.
+2b. **Normalise `$TASK` to the bare requirement** before substituting it anywhere. Strip a leading skill-invocation preamble — `Invoke the <skill> skill with arguments:`, `/<skill>`, `run <skill> on`, `use <skill> to` — and nothing else; never text that could be a requirement. Steps that treat `$TASK` as the spec (`validate-ui`) otherwise grade the implementation against an instruction to invoke a skill (`RATIONALE.md`). Show the normalised task in the confirmation below so the user can correct it.
 3. **Confirm with the user and wait for a reply.** Present the guess and the alternatives — e.g.:
 
    > Cycle: **feature-cycle** — _<its description>_
@@ -51,6 +51,13 @@ OUT=~/.claude/skill-output/$REPO/$BRANCH
 mkdir -p "$OUT"
 TS=$(date +%Y%m%d-%H%M%S)
 RUNLOG="$OUT/orch-run-$TS.md"
+# Claim the branch's output dir for the duration of this cycle. Each step's skill
+# now records itself in a per-session runlog when invoked by hand (lib/runlog.sh);
+# this sentinel is how it knows not to, since a subagent cannot see this shell's
+# env. Without it the same step would be logged twice — once here and once by the
+# skill — and forensics would read one cycle as two and double-count every leak.
+source ~/.claude/skills/lib/runlog.sh
+runlog_cycle_begin
 ```
 
 ## Step 2: Load the chosen cycle definition
@@ -96,6 +103,7 @@ These need the human, so they **cannot be isolated**. Do NOT spawn a subagent. I
 Substitute `$TASK` into `args`, then spawn ONE subagent with the **Task** tool using `subagent_type` = the step's `agent_type` (default `general-purpose`). If the step has a `model`, pass it as the Task tool's `model` (`haiku`/`sonnet`/`opus`); if absent, omit `model` so the subagent inherits the session model. Before spawning, append `SPAWN: <id> agent_type=<agent_type>` to `$RUNLOG` — this is the launch tally used in Step 4. Give it exactly this prompt:
 
 > You are running one isolated step of the `<cycle>` cycle — repo `<REPO>`, branch `<BRANCH>`.
+> `ORCH_CYCLE_STEP: 1` — I record your result in the cycle runlog myself. If the skill you invoke ends with a `runlog_append` step, SKIP it; export `ORCH_CYCLE_STEP=1` in that shell if you run it anyway.
 > — If `scope: global`: **Invoke the `<skill>` skill** (Skill tool) with arguments: `<resolved args>`. If you cannot invoke it as a skill, read and follow `~/.claude/skills/<skill>/SKILL.md`.
 > — If `scope: repo`: **Read and follow `<SKILLFILE>`** (a repo-local skill) with arguments: `<resolved args>`.
 > The skill reads any prior step's output from `~/.claude/skill-output/<REPO>/<BRANCH>/` itself and writes its own artifact there. Do the full work it describes.
@@ -106,46 +114,45 @@ Substitute `$TASK` into `args`, then spawn ONE subagent with the **Task** tool u
 > `FOLLOWUP: <what the next step or the human must know, or ->`
 > `DECISIONS: <comma-sep decision-memo ids the skill raised via lib/decide.sh, or ->`
 
-The `DECISIONS` line is additive to the original four-line contract — existing cycles that don't care about it still parse unchanged. It matters most paired with `STATUS: BLOCKED` (the skill couldn't proceed and is waiting on an answer — see Step 3e), but note any ids raised in passing even on a `PASS`.
+`DECISIONS` is additive to the original four-line contract; note any ids raised even on a `PASS`. It matters most with `STATUS: BLOCKED` (Step 3e).
 
-Any runner implementing this contract MUST treat a step or remediation whose backing process is no longer alive and which produced no five-line report as `STATUS: FAIL` — never leave it indefinitely as `running`/`remediating`. **Existence of a result file is not liveness.** On `dev-screen/home-cleanup` a remediation wrapper died on an unrelated crash while its headless session kept running for ~20 more minutes and did emit a valid `STATUS: PASS` that nothing captured; the step showed "Remediating" until a human spent 84 turns hand-patching `manifest.json`.
+**Existence of a result file is not liveness.** Any runner implementing this contract MUST treat a step or remediation whose backing process is no longer alive and which produced no five-line report as `STATUS: FAIL` — never leave it indefinitely as `running`/`remediating` (`RATIONALE.md`).
 
-Wait for the subagent to finish. Append its five-line result under the step's heading in `$RUNLOG`. Show the user one line: `✅/❌ <id> [<agent_type>]: <SUMMARY>`, followed by the running launch tally so far this run: `grep '^SPAWN:' "$RUNLOG" | sed -E 's/.*agent_type=//' | sort | uniq -c | sort -rn` (e.g. `Launches so far — general-purpose: 2, Plan: 1`).
+Wait for the subagent to finish. Append its five-line result under the step's heading in `$RUNLOG`. Show the user one line — `✅/❌ <id> [<agent_type>]: <SUMMARY>` — then the running launch tally: `~/.claude/skills/lib/spawn-tally.sh "$RUNLOG"`.
 
 ### e. Failure gate (applies to b–d)
 If a step's result `STATUS` is not `PASS` (or an interactive step is abandoned):
-- If `STATUS` is `BLOCKED` → always take the `BLOCKED` handling below, even when `stop_on_fail` is `false`. An open decision memo is a hard stop everywhere (AUTHORING.md § Interaction contract; Ben's silence-is-never-consent rule) — `stop_on_fail` softens *failures*, it never authorizes sailing past an unanswered decision. Once the memos are resolved and the step re-run, a still-failing `stop_on_fail: false` step is then recorded-and-continued like any other non-critical failure.
-- Else if `stop_on_fail` is `false` → record it and continue (a wiki hiccup here shouldn't stop the run).
-- Otherwise, branch on `STATUS`:
+- `STATUS: BLOCKED` → always take the `BLOCKED` handling below, even when `stop_on_fail` is `false`. `stop_on_fail` softens *failures*; it never authorizes sailing past an unanswered decision (AUTHORING.md § Interaction contract). Once the memos are resolved and the step re-run, a still-failing `stop_on_fail: false` step is recorded-and-continued like any other.
+- Else `stop_on_fail: false` → record it and continue.
+- Otherwise branch on `STATUS`:
 
-  **`STATUS: BLOCKED`** — the subagent raised one or more decision memos (via `lib/decide.sh`) instead of guessing, and its `DECISIONS` line names them. Isolated subagents never have AskUserQuestion (see Gotchas) — the orchestrator is the interactive seat, so it resolves them now:
-  1. Run `lib/decide.sh list open` (scoped to `$OUT`).
-  2. If it lists any open memos: read each memo file and present it to the user via AskUserQuestion — recommendation first, lettered options, per AUTHORING.md § Interaction contract. **This ends the turn.** No defaults, no proceeding because the user "hasn't answered yet" (Ben's hard rule) — wait for the actual reply.
-  3. For each answer, write the resolution with `lib/decide.sh resolve <id>` (pipe the chosen option/text on stdin).
-  4. Once every listed memo is resolved, **re-run the SAME step** (same spawn as 3d, same `args`) and re-enter this gate with its new result. Do not advance to the next step yet and do not restart the cycle from Step 0 — this is the MINIMAL resume scope: same run, same step, no `/orch-ui resume` mode for re-entering a past `$RUNLOG` in a new session.
-  5. If `list open` comes back empty despite `STATUS: BLOCKED` (nothing left to resolve), fall through to the halt below — treat it like an unremediated FAIL.
+  **`STATUS: BLOCKED`** — the subagent raised decision memos instead of guessing and named them on `DECISIONS`. Isolated subagents have no AskUserQuestion, so you are the interactive seat: resolve them now per **AUTHORING.md § Decision memos** (`lib/decide.sh list open`, present each via AskUserQuestion, `resolve <id>` with the answer on stdin). Presenting **ends the turn** — wait for the actual reply.
 
-  **`STATUS: FAIL`, and the step's cycle entry declares `remediate: {skill, max}`** — bounded remediation before giving up:
-  1. Track a round counter for this step in `$RUNLOG` (e.g. `<id>: remediation round N/max`) — read back whatever is already logged before incrementing, so a mid-run compaction never loses count.
-  2. Before spawning, append `SPAWN: <id>-remediate agent_type=<agent_type>` to `$RUNLOG` (same `agent_type` as the gated step, unless `remediate` specifies its own). Spawn ONE subagent, same isolation and five-line contract as 3d, for `remediate.skill`, substituting `$TASK` into `remediate.args` and passing it the failing step's `ARTIFACT` path so it knows what to fix (e.g. validate's remediation reads "fix validation gaps — read the latest validation-report").
-  3. Re-run the gated step itself (same skill/args as the original 3d spawn) to re-verify. Never accept the remediation subagent's own say-so — only a fresh `PASS` from the gate step counts as fixed.
-  4. Append the round and its outcome to `$RUNLOG`, and show the user the same one-line-plus-tally format as 3d (`✅/❌ <id>-remediate [<agent_type>]: <SUMMARY>`, then the running launch tally).
-     - `PASS` → continue the cycle normally.
-     - `BLOCKED` → jump to the `BLOCKED` handling above.
-     - `FAIL` and the round counter is still below `max` → repeat from (2).
-     - `FAIL` and the round counter has reached `max` (cap exhaustion) → run `lib/decide.sh list open`; if it lists open memos, resolve them (steps 2–4 of the `BLOCKED` handling above) and re-run the gate step once more — whatever it reports next is terminal, do not re-enter the remediation loop with a fresh cap. If there are no open memos at cap, fall through to the halt below.
+  Then **re-run the SAME step** — same spawn as 3d, same `args` — and re-enter this gate with its result. Do not advance, and do not restart from Step 0: this is the minimal resume scope, and there is no `/orch-ui resume` mode for re-entering a past `$RUNLOG`. If `list open` is empty despite `BLOCKED`, treat it as an unremediated FAIL and halt.
 
-  **`STATUS: FAIL` with no `remediate` declared, or terminal after the above** → **halt the cycle.** Tell the user which step stopped it, the `FOLLOWUP`, and the artifact path, and that later steps did not run. Spawn no further subagents.
+  **`STATUS: FAIL` with `remediate: {skill, max}` declared** — bounded remediation:
+  1. Track the round counter in `$RUNLOG` (`<id>: remediation round N/max`), reading back what's logged before incrementing so a compaction can't lose count.
+  2. Append `SPAWN: <id>-remediate agent_type=<agent_type>`, then spawn ONE subagent for `remediate.skill` — same isolation and five-line contract as 3d — substituting `$TASK` into `remediate.args` and passing the failing step's `ARTIFACT` path.
+  3. Re-run the gated step to re-verify. Only a fresh `PASS` from the gate counts; the remediation subagent's own say-so never does.
+  4. Log the round and show the same one-line-plus-tally format as 3d. Then: `PASS` → continue. `BLOCKED` → the handling above. `FAIL` below `max` → repeat from (2). `FAIL` at `max` → resolve any open memos and re-run the gate once; whatever it reports is terminal — never re-enter the loop with a fresh cap.
+
+  **`STATUS: FAIL` with no `remediate`, or terminal after the above** → **halt the cycle.** Tell the user which step stopped it, its `FOLLOWUP` and artifact path, and that later steps did not run. Spawn no further subagents.
 
 ## Step 4: Finish
 
 Print a compact summary table: `step | status | artifact`. Point the user at `$RUNLOG`. Do not dump artifact contents.
 
-Then tally subagent launches by type from the `SPAWN:` lines logged during Step 3:
+Then print the per-run launch tally, and release the sentinel from Step 1:
 ```bash
-grep '^SPAWN:' "$RUNLOG" | sed -E 's/.*agent_type=//' | sort | uniq -c | sort -rn
+~/.claude/skills/lib/spawn-tally.sh "$RUNLOG"
+# Release on EVERY exit from this skill, not just this step: a halt at the failure
+# gate, an open decision memo, and cap exhaustion all end the cycle too. A
+# sentinel left behind suppresses per-skill logging until it ages out, so hand-run
+# work in that window goes unrecorded. Staleness-bounded (6h) because this is
+# exactly the step a halt skips.
+source ~/.claude/skills/lib/runlog.sh
+runlog_cycle_end
 ```
-Print this as a one-line-per-type list, e.g. `general-purpose: 4, Plan: 1`. This count is per-run only (not cumulative across cycles).
 
 ## Rules
 
