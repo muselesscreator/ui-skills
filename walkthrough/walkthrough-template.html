@@ -30,23 +30,18 @@
     --add-bg: rgba(96, 253, 255, 0.12);
     --del: var(--ruby);
     --del-bg: rgba(225, 126, 225, 0.14);
-    --node-bg: var(--brass);
-    --node-ink: #15191f;
     --font-heading: 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
     --focus-ring: 0 0 0 4px rgba(96, 253, 255, 0.45);
+    --sidebar-w: 260px;
   }
 
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--ink);
     font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-  .wrap {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 2.75rem 1.5rem 5rem;
   }
   a { color: var(--accent); }
   a:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
@@ -63,7 +58,7 @@
     text-transform: uppercase;
     color: var(--accent);
   }
-  h1 { margin: 0 0 .9rem; font-size: 1.85rem; font-weight: 650; color: var(--brass); }
+  h1 { margin: 0 0 .9rem; font-size: 1.5rem; font-weight: 650; color: var(--brass); }
   .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; }
   .chip {
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -85,10 +80,75 @@
     font-size: inherit;
     color: inherit;
   }
-  header { padding-bottom: 1.6rem; border-bottom: 2px solid var(--rule-strong); }
+
+  /* ---- App shell: sticky sidebar + scrollable stage ---- */
+  .shell {
+    display: flex;
+    align-items: flex-start;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .sidebar {
+    flex: none;
+    width: var(--sidebar-w);
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--rail-bg);
+    border-right: 1px solid var(--rule-strong);
+    padding: 1.3rem 1rem 2rem;
+  }
+  .sidebar .brand {
+    margin: 0 0 1.1rem;
+  }
+  .sidebar .brand h1 { font-size: 1.05rem; margin: 0 0 .3rem; }
+  .side-group-label {
+    margin: 1.1rem 0 .35rem;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .side-group-label:first-of-type { margin-top: 0; }
+  .side-item {
+    display: block;
+    text-decoration: none;
+    color: var(--muted);
+    font-size: .88rem;
+    padding: .4rem .55rem;
+    border-radius: 5px;
+    border-left: 2px solid transparent;
+    margin: .1rem 0;
+    line-height: 1.35;
+  }
+  .side-item:hover { color: var(--ink); background: rgba(255, 255, 255, 0.04); }
+  .side-item.active {
+    color: var(--brass);
+    border-left-color: var(--brass);
+    background: rgba(255, 242, 0, 0.08);
+    font-weight: 600;
+  }
+  .side-item .n {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--accent);
+    margin-right: .35rem;
+  }
+  .side-item.warn { color: var(--brass); }
+
+  .stage {
+    flex: 1;
+    min-width: 0;
+    padding: 2rem 2.25rem 5rem;
+  }
+  header.top { padding-bottom: 1.4rem; border-bottom: 2px solid var(--rule-strong); margin-bottom: 1.6rem; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
 
   .tldr {
-    margin: 1.6rem 0 2.4rem;
+    margin: 0 0 1.4rem;
     padding: 1rem 1.2rem;
     background: var(--card);
     border: 1px solid var(--rule-strong);
@@ -97,25 +157,16 @@
   }
   .tldr p { margin: 0; }
 
-  nav.contents {
-    margin: 0 0 2.6rem;
-    display: flex;
-    flex-wrap: wrap;
-    gap: .4rem;
-  }
-  nav.contents a.chip {
-    text-decoration: none;
-    color: var(--ink);
-  }
-  nav.contents a.chip:hover { border-color: var(--accent); color: var(--accent); }
-
-  h2 { font-size: 1.4rem; margin: 2.6rem 0 1rem; color: var(--brass); }
+  h2 { font-size: 1.3rem; margin: 1.8rem 0 .9rem; color: var(--brass); }
+  h2:first-child { margin-top: 0; }
 
   table.cast {
     width: 100%;
     border-collapse: collapse;
     font-size: .92rem;
     margin: .5rem 0 1rem;
+    display: block;
+    overflow-x: auto;
   }
   table.cast th, table.cast td {
     text-align: left;
@@ -132,51 +183,9 @@
   }
   table.cast td code { white-space: nowrap; }
 
-  .timeline { position: relative; margin-top: 1rem; }
-  .timeline::before {
-    content: "";
-    position: absolute;
-    left: 17px;
-    top: 6px;
-    bottom: 6px;
-    width: 2px;
-    background: var(--rule-strong);
-  }
-  .chapter {
-    position: relative;
-    display: flex;
-    gap: 1.1rem;
-    margin-bottom: 2rem;
-    scroll-margin-top: 1rem;
-  }
-  .chapter .node {
-    position: relative;
-    z-index: 1;
-    flex: none;
-  }
-  .chapter .dot {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--node-bg);
-    color: var(--node-ink);
-    font-weight: 700;
-    font-size: .95rem;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  }
-  .chapter .card {
-    flex: 1;
-    min-width: 0;
-    background: var(--card);
-    border: 1px solid var(--rule-strong);
-    border-radius: 8px;
-    padding: 1rem 1.2rem 1.2rem;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-  .chapter h3 { font-size: 1.15rem; font-weight: 650; margin: 0 0 .5rem; color: var(--ink); }
+  /* ---- Chapter panel: head + two-column body (narrative | code) ---- */
+  .chapter-head { margin-bottom: 1rem; }
+  .chapter-head h2 { margin: .15rem 0 .6rem; }
   .files { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin: 0 0 .6rem; }
   .files .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-right: .2rem; }
   .size {
@@ -188,20 +197,52 @@
   .size .sep { color: var(--muted); padding: 0 .1em; }
   table.cast td.size-cell { white-space: nowrap; }
   p.why {
-    margin: 0 0 .8rem;
+    margin: 0 0 .5rem;
     font-size: .92rem;
     color: var(--muted);
   }
   p.why strong { color: var(--ink); }
   .narrative p { margin: .5rem 0; }
   p.connects {
-    margin: .9rem 0 0;
+    margin: 1rem 0 0;
     font-size: .88rem;
     color: var(--muted);
     border-top: 1px dashed var(--rule);
     padding-top: .6rem;
   }
   p.connects strong { color: var(--accent); }
+
+  .chapter-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.75rem;
+  }
+  .narrative-pane { flex: 1 1 42%; min-width: 260px; }
+  .code-pane { flex: 1 1 58%; min-width: 0; }
+  @media (max-width: 900px) {
+    .chapter-body { flex-direction: column; }
+    .narrative-pane, .code-pane { flex: none; width: 100%; }
+  }
+
+  .file-tabs { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .6rem; }
+  .file-tab {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .74rem;
+    color: var(--muted);
+    background: var(--rail-bg);
+    border: 1px solid var(--rule-strong);
+    border-radius: 4px;
+    padding: .3rem .6rem;
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-tab:hover { border-color: var(--accent); color: var(--accent); }
+  .file-tab.active { border-color: var(--brass); color: var(--brass); background: rgba(255, 242, 0, 0.08); }
+  .file-pane { display: none; }
+  .file-pane.active { display: block; }
 
   code {
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -242,9 +283,45 @@
   pre.diff .del::before { content: "\2212 "; font-weight: 700; }
   pre.diff .ctx { color: var(--muted); border-left: 3px solid transparent; }
   pre.diff .ctx::before { content: "\00a0\00a0"; }
+  pre.diff .line.dim { opacity: .32; }
+  pre.diff.attached {
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+  .diff-file-label {
+    margin: 1rem 0 0;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .78rem;
+    color: var(--muted);
+    letter-spacing: .01em;
+  }
+  .diff-file-label:first-of-type { margin-top: 0; }
+  .diff-missing {
+    margin: .8rem 0;
+    font-size: .85rem;
+    color: var(--muted);
+    font-style: italic;
+  }
 
-  section.extra { margin-top: 2.4rem; }
-  section.extra h2 { margin-top: 0; }
+  p.flag {
+    margin: 0 0 .8rem;
+    font-size: .88rem;
+    padding: .35rem .7rem;
+    border-radius: 5px;
+    border: 1px solid;
+  }
+  p.flag strong { text-transform: uppercase; font-size: .74rem; letter-spacing: .04em; }
+  p.flag.flag-risk { color: var(--ruby); border-color: var(--ruby); background: var(--del-bg); }
+  p.flag.flag-deviation { color: var(--brass); border-color: var(--brass-soft); background: rgba(255, 242, 0, 0.08); }
+  p.flag.flag-undocumented { color: var(--working); border-color: var(--working); background: rgba(167, 171, 242, 0.1); }
+  p.flag.flag-tradeoff { color: var(--accent); border-color: var(--accent); background: var(--add-bg); }
+
+  .chip.coverage-ok { border-color: var(--accent); color: var(--accent); }
+  .chip.coverage-warn { border-color: var(--brass); color: var(--brass); }
+  .unplaced-file { margin-bottom: 1.6rem; }
+  .unplaced-file h3 { font-size: 1rem; margin: 0 0 .4rem; }
+  section.unplaced .note { font-size: .88rem; color: var(--muted); margin: 0 0 1rem; }
+
   ul, ol { margin: .45rem 0; padding-left: 1.35rem; }
   li { margin: .32rem 0; }
   li::marker { color: var(--muted); }
@@ -260,33 +337,76 @@
     color: var(--accent);
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
   }
+
+  /* ---- Narrow viewport: sidebar collapses into a horizontal tab strip ---- */
+  @media (max-width: 760px) {
+    .shell { flex-direction: column; }
+    .sidebar {
+      width: 100%;
+      height: auto;
+      position: static;
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: .3rem;
+      padding: .8rem;
+      border-right: none;
+      border-bottom: 1px solid var(--rule-strong);
+    }
+    .sidebar .brand { display: none; }
+    .side-group-label { display: none; }
+    .side-item {
+      white-space: nowrap;
+      border-left: none;
+      border-bottom: 2px solid transparent;
+      flex: none;
+    }
+    .side-item.active { border-left-color: transparent; border-bottom-color: var(--brass); }
+    .stage { padding: 1.4rem 1.1rem 3rem; }
+  }
 </style>
 
-<div class="wrap">
-  <header>
-    <p class="eyebrow">Code walkthrough</p>
-    <h1>
+<div class="shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="brand">
+      <p class="eyebrow">Code walkthrough</p>
+      <h1>
 {{TITLE}}
-    </h1>
-    <p class="meta">
-      <span class="chip">
+      </h1>
+    </div>
+    <div id="side-list"></div>
+  </nav>
+  <main class="stage">
+    <header class="top">
+      <p class="meta">
+        <span class="chip">
 {{REPO}}
-      </span>
-      <span class="chip">
+        </span>
+        <span class="chip">
 {{BRANCH}}
-      </span>
-      <span class="chip">
+        </span>
+        <span class="chip">
 {{DATE}}
-      </span>
-      <span class="chip" id="stat-files"></span>
-      <span class="chip" id="stat-chapters"></span>
-    </p>
-  </header>
-  <main id="doc"></main>
+        </span>
+        <span class="chip" id="stat-files"></span>
+        <span class="chip" id="stat-chapters"></span>
+        <span class="chip" id="stat-coverage"></span>
+      </p>
+    </header>
+    <div id="panels"></div>
+  </main>
 </div>
 
 <pre id="doc-src" hidden>
 {{WALKTHROUGH_MD}}
+</pre>
+
+<pre id="diff-src" hidden>
+{{DIFF_SRC}}
+</pre>
+
+<pre id="filelist-src" hidden>
+{{FILE_LIST}}
 </pre>
 
 <script>
@@ -294,6 +414,7 @@
   var esc = function (s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   };
+  var escAttr = function (s) { return esc(s).replace(/"/g, '&quot;'); };
   var inline = function (s) {
     return esc(s)
       .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -309,6 +430,64 @@
     return '<span class="size"><span class="add">+' + m[1] + '</span>' +
       '<span class="sep">/</span><span class="del">-' + m[2] + '</span></span>';
   };
+  var stripPath = function (s) { return s.replace(/`/g, '').trim(); };
+
+  // Parses a real `git diff` patch OR a synthesized all-context pseudo-diff
+  // (feature-tour mode) into { path: [{cls, text, n}] }. `n` is the new-side
+  // line number (null for deleted lines) — used to match **Focus:** ranges.
+  function parseDiffSrc(text) {
+    var map = {};
+    if (!text) return map;
+    var lines = text.replace(/\r/g, '').split('\n');
+    var i = 0;
+    while (i < lines.length) {
+      var m = lines[i].match(/^diff --git a\/(.+) b\/(.+)$/);
+      if (!m) { i++; continue; }
+      var path = m[2];
+      i++;
+      var rows = [];
+      while (i < lines.length && !/^diff --git a\//.test(lines[i])) {
+        var hm = lines[i].match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (hm) {
+          var newLine = parseInt(hm[1], 10);
+          i++;
+          while (i < lines.length && !/^@@ /.test(lines[i]) && !/^diff --git a\//.test(lines[i])) {
+            var l = lines[i];
+            if (l.charAt(0) === '+') { rows.push({ cls: 'add', text: l.slice(1), n: newLine }); newLine++; i++; }
+            else if (l.charAt(0) === '-') { rows.push({ cls: 'del', text: l.slice(1), n: null }); i++; }
+            else if (l.charAt(0) === '\\') { i++; }
+            else { rows.push({ cls: 'ctx', text: l.slice(1), n: newLine }); newLine++; i++; }
+          }
+          continue;
+        }
+        i++;
+      }
+      map[path] = rows;
+    }
+    return map;
+  }
+
+  // Renders one file's attached diff/content. `focusRange` (optional [start,end],
+  // new-side line numbers) dims everything outside it — dimming only, never hides.
+  function renderFileDiff(rows, focusRange) {
+    var html = rows.map(function (r) {
+      var dim = focusRange && r.n != null && (r.n < focusRange[0] || r.n > focusRange[1]);
+      var cls = r.cls + (dim ? ' dim' : '');
+      return '<div class="line ' + cls + '">' + esc(r.text) + '</div>';
+    }).join('');
+    return '<pre class="diff attached">' + html + '</pre>';
+  }
+
+  function parseFocus(raw) {
+    var map = {};
+    if (!raw) return map;
+    raw.split(',').forEach(function (entry) {
+      var m = entry.match(/^\s*(.+?)\s*:\s*(\d+)\s*-\s*(\d+)\s*$/);
+      if (!m) return;
+      map[stripPath(m[1])] = [parseInt(m[2], 10), parseInt(m[3], 10)];
+    });
+    return map;
+  }
 
   function splitTopSections(lines) {
     var sections = [];
@@ -363,7 +542,7 @@
     return out.join('\n');
   }
 
-  function renderTable(lines) {
+  function renderTable(lines, covered) {
     var rows = lines.filter(function (l) { return /^\s*\|/.test(l); });
     if (rows.length < 2) return '';
     var split = function (r) {
@@ -381,6 +560,7 @@
       var cells = split(r);
       if (cells.length < 2) return;
       count++;
+      if (covered && cells[0]) covered[stripPath(cells[0])] = true;
       html += '<tr>' + cells.map(function (c, idx) {
         return idx === sizeIdx ? '<td class="size-cell">' + renderSize(c) + '</td>' : '<td>' + inline(c) + '</td>';
       }).join('') + '</tr>';
@@ -400,29 +580,29 @@
     return '<pre class="diff">' + html + '</pre>';
   }
 
-  function renderChapters(lines) {
-    var chapters = [];
+  // Parses the "## Timeline" section into one structured chapter per "### "
+  // heading. Returns narrative/head HTML plus a `files` list (path + rows +
+  // focusRange) so the caller can build a per-file tab strip instead of
+  // stacking every file's diff inline.
+  function parseChapters(lines, covered, diffMap) {
+    var raw = [];
     var cur = null;
     for (var i = 0; i < lines.length; i++) {
       var m = lines[i].match(/^###\s+(?:\d+[.)]\s*)?(.+?)\s*$/);
       if (m) {
-        if (cur) chapters.push(cur);
+        if (cur) raw.push(cur);
         cur = { title: m[1], lines: [] };
       } else if (cur) {
         cur.lines.push(lines[i]);
       }
     }
-    if (cur) chapters.push(cur);
+    if (cur) raw.push(cur);
 
-    var nav = [];
-    var body = [];
-    chapters.forEach(function (ch, idx) {
+    var chapters = raw.map(function (ch, idx) {
       var n = idx + 1;
       var id = 'ch-' + n;
-      nav.push('<a class="chip" href="#' + id + '">' + n + '. ' + inline(ch.title) + '</a>');
 
-      var files = '', why = '', connects = '', size = '';
-      var rest = [];
+      var files = '', why = '', connects = '', size = '', focusRaw = '', flagRaw = '';
       var cl = ch.lines;
       var j = 0;
       var out = [];
@@ -438,10 +618,14 @@
         var fm = line.match(/^\*\*Files:\*\*\s*(.+)$/i);
         var sm = line.match(/^\*\*Size:\*\*\s*(.+)$/i);
         var wm = line.match(/^\*\*Why:\*\*\s*(.+)$/i);
+        var focm = line.match(/^\*\*Focus:\*\*\s*(.+)$/i);
+        var flgm = line.match(/^\*\*Flag:\*\*\s*(.+)$/i);
         var cm = line.match(/^\*\*Connects to:\*\*\s*(.+)$/i);
         if (fm) { files = fm[1]; j++; continue; }
         if (sm) { size = sm[1]; j++; continue; }
         if (wm) { why = wm[1]; j++; continue; }
+        if (focm) { focusRaw = focm[1]; j++; continue; }
+        if (flgm) { flagRaw = flgm[1]; j++; continue; }
         if (cm) { connects = cm[1]; j++; continue; }
         if (/^```/.test(line)) {
           flush();
@@ -457,31 +641,76 @@
       }
       flush();
 
-      var filesHtml = '';
+      var filesList = [];
+      var filesSummaryHtml = '';
       if (files) {
         var sizeChip = size ? '<span class="chip">' + renderSize(size) + '</span>' : '';
-        filesHtml = '<p class="files"><span class="label">Files</span>' +
+        filesSummaryHtml = '<p class="files"><span class="label">Files</span>' +
           files.split(',').map(function (f) { return '<span class="chip">' + inline(f.trim()) + '</span>'; }).join('') +
           sizeChip +
           '</p>';
+
+        var chapterFocus = parseFocus(focusRaw);
+        files.split(',').forEach(function (f) {
+          var path = stripPath(f);
+          if (!path) return;
+          if (covered) covered[path] = true;
+          var rows = diffMap ? diffMap[path] : null;
+          filesList.push({ path: path, rows: rows, focusRange: chapterFocus[path] });
+        });
       }
+
       var whyHtml = why ? '<p class="why"><strong>Why:</strong> ' + inline(why) + '</p>' : '';
+      var flagHtml = '';
+      if (flagRaw) {
+        var flm = flagRaw.match(/^(deviation|undocumented|risk|tradeoff)\s*[—-]\s*(.+)$/i);
+        flagHtml = flm
+          ? '<p class="flag flag-' + flm[1].toLowerCase() + '"><strong>' + flm[1].toLowerCase() + '</strong> — ' + inline(flm[2]) + '</p>'
+          : '<p class="flag flag-risk">' + inline(flagRaw) + '</p>';
+      }
       var connectsHtml = connects ? '<p class="connects"><strong>&rarr; Connects to:</strong> ' + inline(connects) + '</p>' : '';
 
-      body.push(
-        '<div class="chapter" id="' + id + '">' +
-          '<div class="node"><span class="dot">' + n + '</span></div>' +
-          '<div class="card">' +
-            '<h3>' + inline(ch.title) + '</h3>' +
-            filesHtml + whyHtml +
-            '<div class="narrative">' + out.join('\n') + '</div>' +
-            connectsHtml +
-          '</div>' +
-        '</div>'
-      );
+      return {
+        id: id, n: n, title: ch.title,
+        filesSummaryHtml: filesSummaryHtml, whyHtml: whyHtml, flagHtml: flagHtml,
+        narrativeHtml: '<div class="narrative">' + out.join('\n') + '</div>',
+        connectsHtml: connectsHtml,
+        files: filesList
+      };
     });
 
-    return { navHtml: nav.join(''), bodyHtml: '<div class="timeline">' + body.join('\n') + '</div>', count: chapters.length };
+    return { chapters: chapters, count: chapters.length };
+  }
+
+  // Builds one <section class="panel chapter-panel"> with a narrative column
+  // and a code column whose file-tab strip shows exactly one file's diff at
+  // a time (click a tab to switch — the rest stay rendered but hidden, so
+  // nothing is re-fetched).
+  function buildChapterPanel(ch) {
+    var tabsHtml = ch.files.map(function (f, idx) {
+      return '<button type="button" class="file-tab' + (idx === 0 ? ' active' : '') + '" data-path="' + escAttr(f.path) + '">' + esc(f.path) + '</button>';
+    }).join('');
+    var panesHtml = ch.files.map(function (f, idx) {
+      var body = (f.rows && f.rows.length)
+        ? renderFileDiff(f.rows, f.focusRange)
+        : '<p class="diff-missing">No content captured for this file.</p>';
+      return '<div class="file-pane' + (idx === 0 ? ' active' : '') + '" data-path="' + escAttr(f.path) + '">' + body + '</div>';
+    }).join('');
+    var codePane = ch.files.length
+      ? '<div class="code-pane"><div class="file-tabs">' + tabsHtml + '</div><div class="file-panes">' + panesHtml + '</div></div>'
+      : '';
+
+    return '<section class="panel chapter-panel" id="' + ch.id + '">' +
+      '<div class="chapter-head">' +
+        '<p class="eyebrow">Chapter ' + ch.n + ' of ' + ch.total + '</p>' +
+        '<h2>' + inline(ch.title) + '</h2>' +
+        ch.filesSummaryHtml + ch.whyHtml + ch.flagHtml +
+      '</div>' +
+      '<div class="chapter-body">' +
+        '<div class="narrative-pane">' + ch.narrativeHtml + ch.connectsHtml + '</div>' +
+        codePane +
+      '</div>' +
+    '</section>';
   }
 
   var srcEl = document.getElementById('doc-src');
@@ -490,31 +719,129 @@
   var lines = raw.split('\n');
   var sections = splitTopSections(lines);
 
-  var main = document.getElementById('doc');
+  var diffSrcEl = document.getElementById('diff-src');
+  var diffMap = parseDiffSrc(diffSrcEl ? diffSrcEl.textContent.replace(/\r/g, '') : '');
+  var filelistEl = document.getElementById('filelist-src');
+  var filelistRaw = filelistEl ? filelistEl.textContent.replace(/\r/g, '').trim() : '';
+  var covered = {};
+
   var fileCount = 0, chapterCount = 0;
+  var overviewHtml = '';
+  var sidebarItems = []; // { id, label, group: 'chapter'|'extra', n }
+  var panelsHtml = '';
 
   sections.forEach(function (sec) {
     var slug = slugify(sec.title);
     if (slug === 'tl-dr' || slug === 'tldr') {
-      main.innerHTML += '<div class="tldr">' + renderParagraphsAndLists(sec.lines) + '</div>';
+      overviewHtml += '<div class="tldr">' + renderParagraphsAndLists(sec.lines) + '</div>';
     } else if (slug === 'cast-of-changes') {
-      var t = renderTable(sec.lines);
+      var t = renderTable(sec.lines, covered);
       if (t) {
         fileCount = t.count;
-        main.innerHTML += '<h2>' + inline(sec.title) + '</h2>' + t.html;
+        overviewHtml += '<h2>' + inline(sec.title) + '</h2>' + t.html;
       }
     } else if (slug === 'timeline') {
-      var r = renderChapters(sec.lines);
+      var r = parseChapters(sec.lines, covered, diffMap);
       chapterCount = r.count;
-      main.innerHTML += '<nav class="contents">' + r.navHtml + '</nav>' + r.bodyHtml;
+      r.chapters.forEach(function (ch) {
+        ch.total = r.count;
+        sidebarItems.push({ id: ch.id, label: ch.n + '. ' + ch.title, group: 'chapter' });
+        panelsHtml += buildChapterPanel(ch);
+      });
     } else {
-      main.innerHTML += '<section class="extra"><h2>' + inline(sec.title) + '</h2>' + renderParagraphsAndLists(sec.lines) + '</section>';
+      var id = 'panel-' + slugify(sec.title);
+      sidebarItems.push({ id: id, label: sec.title, group: 'extra' });
+      panelsHtml += '<section class="panel" id="' + id + '"><h2>' + inline(sec.title) + '</h2>' + renderParagraphsAndLists(sec.lines) + '</section>';
     }
   });
+
+  // Completeness cross-check: files-*.txt (from Step 1, untouched by the model)
+  // is the ground truth. Anything referenced nowhere in the doc gets its own
+  // "Unplaced files" panel instead of silently disappearing. Feature-tour mode
+  // has no file list, so there's no coverage concept to show.
+  var missing = [];
+  if (filelistRaw) {
+    var allPaths = filelistRaw.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    missing = allPaths.filter(function (p) { return !covered[p]; });
+    var covEl = document.getElementById('stat-coverage');
+    if (covEl) {
+      if (missing.length) {
+        covEl.textContent = (allPaths.length - missing.length) + '/' + allPaths.length + ' files ⚠';
+        covEl.className = 'chip coverage-warn';
+      } else if (allPaths.length) {
+        covEl.textContent = 'all ' + allPaths.length + ' files ✓';
+        covEl.className = 'chip coverage-ok';
+      }
+    }
+    if (missing.length) {
+      sidebarItems.push({ id: 'panel-unplaced', label: 'Unplaced files (' + missing.length + ')', group: 'extra warn' });
+      var cards = missing.map(function (p) {
+        var rows = diffMap[p];
+        var body = (rows && rows.length)
+          ? renderFileDiff(rows, null)
+          : '<p class="diff-missing">No content captured for <code>' + esc(p) + '</code>.</p>';
+        return '<div class="unplaced-file"><h3>' + esc(p) + '</h3>' + body + '</div>';
+      }).join('');
+      panelsHtml += '<section class="panel unplaced" id="panel-unplaced"><h2>Unplaced files</h2>' +
+        '<p class="note">Not placed in the story above — listed here automatically so nothing is silently dropped.</p>' +
+        cards + '</section>';
+    }
+  } else {
+    var covEl2 = document.getElementById('stat-coverage');
+    if (covEl2) covEl2.remove();
+  }
 
   var fEl = document.getElementById('stat-files');
   var cEl = document.getElementById('stat-chapters');
   if (fEl) fEl.textContent = fileCount ? (fileCount + (fileCount === 1 ? ' file' : ' files')) : '';
   if (cEl) cEl.textContent = chapterCount ? (chapterCount + (chapterCount === 1 ? ' chapter' : ' chapters')) : '';
+
+  sidebarItems.unshift({ id: 'panel-overview', label: 'Overview', group: 'overview' });
+  panelsHtml = '<section class="panel" id="panel-overview">' + overviewHtml + '</section>' + panelsHtml;
+
+  var sideHtml = '';
+  var lastGroup = null;
+  sidebarItems.forEach(function (it) {
+    if (it.group !== lastGroup) {
+      var label = it.group === 'chapter' ? 'Timeline' : (it.group === 'overview' ? '' : 'More');
+      if (label) sideHtml += '<div class="side-group-label">' + label + '</div>';
+      lastGroup = it.group;
+    }
+    var numHtml = it.group === 'chapter' ? '<span class="n">' + it.id.replace('ch-', '') + '</span>' : '';
+    var titleOnly = it.group === 'chapter' ? it.label.replace(/^\d+\.\s*/, '') : it.label;
+    sideHtml += '<a class="side-item' + (it.group.indexOf('warn') >= 0 ? ' warn' : '') + '" data-target="' + it.id + '" href="#' + it.id + '">' + numHtml + inline(titleOnly) + '</a>';
+  });
+
+  document.getElementById('side-list').innerHTML = sideHtml;
+  document.getElementById('panels').innerHTML = panelsHtml;
+
+  function showPanel(id) {
+    var panels = document.querySelectorAll('.panel');
+    for (var i = 0; i < panels.length; i++) panels[i].classList.toggle('active', panels[i].id === id);
+    var links = document.querySelectorAll('.side-item');
+    for (var k = 0; k < links.length; k++) links[k].classList.toggle('active', links[k].getAttribute('data-target') === id);
+    window.scrollTo(0, 0);
+  }
+
+  window.addEventListener('hashchange', function () {
+    var id = location.hash.replace('#', '');
+    if (id && document.getElementById(id)) showPanel(id);
+  });
+
+  document.getElementById('panels').addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.file-tab') : null;
+    if (!btn) return;
+    var panel = btn.closest('.chapter-panel');
+    if (!panel) return;
+    var path = btn.getAttribute('data-path');
+    var tabs = panel.querySelectorAll('.file-tab');
+    for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i] === btn);
+    var panes = panel.querySelectorAll('.file-pane');
+    for (var j = 0; j < panes.length; j++) panes[j].classList.toggle('active', panes[j].getAttribute('data-path') === path);
+  });
+
+  var initial = location.hash.replace('#', '');
+  if (!initial || !document.getElementById(initial)) initial = 'panel-overview';
+  showPanel(initial);
 })();
 </script>
