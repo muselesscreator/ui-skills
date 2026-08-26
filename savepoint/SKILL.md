@@ -22,6 +22,8 @@ confidence_threshold: 70
 
 Write a handoff for a fresh agent with the codebase but **zero memory of this session**. No "as we discussed", no dangling pronouns — every line stands alone. Read-and-write only: no edits, lint, or commits.
 
+Designed to run **proactively around 150k tokens of context use** (per Anthropic's context guidance), *before* auto-compact fires. The intended follow-up is `/clear` (not `/compact`) → [[load-savepoint]] in a fresh session: that resets context to near-zero and pulls back only this dense file, whereas `/compact` leaves a verbose summary resident in context for the rest of the session. Auto-compact remains the safety net if you blow past 150k without running this.
+
 ## Steps
 
 1. **Resolve path:**
@@ -43,14 +45,18 @@ Write a handoff for a fresh agent with the codebase but **zero memory of this se
    ## Goal
    {1–2 sentences: current aim.}
 
+   ## Constraints (verbatim)
+   {Standing user rules and security-relevant instructions, copied WORD-FOR-WORD — never paraphrased. Files/data not to touch, operations forbidden, credential/secret handling, "always/never" directives the user stated this session. Drop the section only if there are genuinely none.}
+
    ## State
    {Done / in progress / not started. What's verified vs assumed (e.g. tests not run).}
 
    ## Decisions
-   - **{decision}** — {why}. {rejected alternative, if load-bearing}
+   - **{decision}** — {why}. {rejected alternative, if load-bearing}. {dead ends tried, so they aren't repeated}
 
    ## Key Files
    - `{path:line}` — {role; what changed or still needs doing}
+   {Also capture code that exists ONLY in this conversation — a proposed diff or snippet not yet written to disk. The fresh agent can re-read the repo, but cannot recover un-written work.}
 
    ## Next Steps
    1. {concrete, ordered, executable}
