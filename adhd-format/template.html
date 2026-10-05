@@ -1,0 +1,630 @@
+<title>
+{{TITLE}}
+</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Atkinson+Hyperlegible+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sticky left rail (progress, contents, reading settings) beside one narrow reading column; the rail folds into a top panel on phones. */
+:root {
+  --bg: #f3f5f2;
+  --surface: #fbfcfa;
+  --fg: #1d2724;
+  --muted: #5b6a65;
+  --line: #d6ddd8;
+  --accent: #2c6e63;
+  --accent-soft: #dcebe6;
+  --added: #fbf1d4;
+  --added-line: #c99a1e;
+  --added-fg: #6b5210;
+  --done: #3f7d4a;
+  --dim: 0.32;
+
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-read: var(--font-body);
+
+  --fs: 1.125rem;
+  --lh: 1.75;
+  --measure: 64ch;
+  --ws: 0em;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161c1b; --surface: #1d2523; --fg: #e3ebe7; --muted: #9aaba5; --line: #33403c;
+    --accent: #7cc4b6; --accent-soft: #233a35; --added: #2e2817; --added-line: #b08a2c; --added-fg: #e6cf8f;
+    --done: #8bc895; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161c1b; --surface: #1d2523; --fg: #e3ebe7; --muted: #9aaba5; --line: #33403c;
+  --accent: #7cc4b6; --accent-soft: #233a35; --added: #2e2817; --added-line: #b08a2c; --added-fg: #e6cf8f;
+  --done: #8bc895; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-inline: 16px; padding-block: 0;
+}
+.shell {
+  display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px;
+  max-width: 1120px; margin: 0 auto;
+}
+
+/* ---------- rail ---------- */
+.rail {
+  position: sticky; top: env(safe-area-inset-top, 0px); align-self: start;
+  max-height: 100vh; overflow-y: auto; padding-block: 28px;
+  display: flex; flex-direction: column; gap: 22px;
+}
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.progress { display: flex; flex-direction: column; gap: 8px; }
+.progress-track { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.progress-fill { height: 100%; width: 0; background: var(--done); transition: width .3s ease; }
+.progress-text { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.progress-text strong { color: var(--fg); }
+
+.toc { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.toc a {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: baseline;
+  padding: 6px 8px; border-radius: 6px; color: var(--fg); text-decoration: none; font-size: 0.92rem;
+}
+.toc a:hover { background: var(--accent-soft); }
+.toc a.active { background: var(--accent-soft); font-weight: 700; }
+.toc .tick { color: var(--muted); font-size: 0.8rem; }
+.toc li.is-done .tick { color: var(--done); }
+.toc li.is-done .label { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+.toc .mins { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.settings { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 18px; }
+.setting { display: flex; flex-direction: column; gap: 6px; }
+.setting > span { font-size: 0.8rem; color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button, .btn {
+  font: inherit; font-size: 0.82rem; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.seg button:hover, .btn:hover { border-color: var(--accent); }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.mobile-bar { display: none; }
+
+/* ---------- reading column ---------- */
+.reader { padding-block: 28px 30vh; min-width: 0; }
+.doc-head { max-width: var(--measure); display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px; }
+.doc-head h1 {
+  font-size: clamp(1.8rem, 1.2rem + 2vw, 2.5rem); line-height: 1.15; margin: 0;
+  text-wrap: balance; letter-spacing: -0.01em;
+}
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; font-variant-numeric: tabular-nums;
+}
+.chip.ok { color: var(--done); border-color: var(--done); }
+.chip.warn { color: var(--added-fg); border-color: var(--added-line); background: var(--added); }
+.legend { font-size: 0.88rem; color: var(--muted); margin: 0; }
+/* Source frontmatter: kept on the page but folded away, since it is metadata rather than reading text. */
+.frontmatter { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.frontmatter summary { cursor: pointer; width: fit-content; }
+.frontmatter pre { font-family: var(--font-mono); font-size: 0.9em; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0 0; }
+.legend .swatch {
+  display: inline-block; width: 0.9em; height: 0.9em; vertical-align: -0.1em; border-radius: 3px;
+  background: var(--added); border: 1px solid var(--added-line); margin-right: 4px;
+}
+.resume[hidden] { display: none; }
+.resume { align-self: flex-start; }
+
+.sec {
+  max-width: var(--measure); padding-block: 8px 28px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  transition: opacity .25s ease;
+}
+body.focus .sec:not(.current) { opacity: var(--dim); }
+body.focus .sec:not(.current):hover { opacity: 0.7; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sec-head h2 { font-size: 1.45rem; line-height: 1.25; margin: 20px 0 10px; text-wrap: balance; }
+.sec-head .mins { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.sec.done .sec-body { display: none; }
+.sec.done .sec-head h2 { color: var(--muted); }
+.sec-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+.sec.done .sec-foot { margin-top: 0; }
+.btn.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+
+.added-tag {
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--added-fg); background: var(--added); border: 1px solid var(--added-line);
+  border-radius: 4px; padding: 1px 5px; vertical-align: 0.3em; margin-left: 6px; white-space: nowrap;
+}
+
+.prose {
+  font-family: var(--font-read); font-size: var(--fs); line-height: var(--lh); word-spacing: var(--ws);
+}
+.prose { display: flex; flex-direction: column; gap: 0.9em; }
+.prose p, .prose ul, .prose ol, .prose blockquote, .prose table, .prose pre, .prose dl { margin-block: 0; }
+.prose li + li { margin-top: 0.5em; }
+.prose h3, .prose h4 { font-family: var(--font-body); line-height: 1.3; margin-top: 0.6em; margin-bottom: 0; }
+.prose h3 { font-size: 1.15em; }
+.prose h4 { font-size: 1em; }
+.prose ul, .prose ol { padding-left: 1.4em; }
+.prose li::marker { color: var(--accent); }
+.prose strong { font-weight: 700; }
+.prose em { font-style: normal; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.prose a { color: var(--accent); text-underline-offset: 3px; }
+/* [[wiki-links]]: resolved ones are links; unresolved ones are plain text with a dotted underline so they still read as a reference. */
+.wikilink { color: var(--accent); text-underline-offset: 3px; }
+.wikilink.unresolved { color: inherit; text-decoration: underline dotted var(--line); }
+.wikilink[data-kind="obsidian"]::after, .wikilink[data-kind="file"]::after { content: " \2197"; font-size: 0.8em; color: var(--muted); }
+.prose blockquote { border-left: 3px solid var(--line); padding-left: 1em; color: var(--muted); }
+.prose code { font-family: var(--font-mono); font-size: 0.86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+.prose pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.5; }
+.prose pre code { background: none; padding: 0; font-size: 0.82em; }
+.prose .table-wrap { overflow-x: auto; }
+.prose table { border-collapse: collapse; font-size: 0.92em; }
+.prose th, .prose td { border-bottom: 1px solid var(--line); padding: 6px 12px 6px 0; text-align: left; vertical-align: top; }
+.prose th { font-weight: 700; }
+.prose hr { border: 0; border-top: 1px solid var(--line); }
+.prose img { max-width: 100%; }
+.prose input[type="checkbox"] { width: 1.05em; height: 1.05em; accent-color: var(--done); vertical-align: -0.12em; margin-right: 0.4em; }
+
+/* ---------- added blocks ---------- */
+.blk {
+  background: var(--added); border: 1px solid var(--added-line); border-radius: 10px;
+  padding: 14px 18px; color: var(--fg);
+}
+.blk-label {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--added-fg);
+}
+.blk-label .added-tag { margin-left: 0; vertical-align: 0; }
+.blk-inner { display: flex; flex-direction: column; gap: 0.6em; }
+.blk-inner p, .blk-inner ul, .blk-inner ol, .blk-inner dl { margin: 0; }
+.blk-inner ul, .blk-inner ol { padding-left: 1.3em; }
+.blk-inner li + li { margin-top: 0.35em; }
+.blk.tldr { padding: 18px 22px; }
+.blk.tldr .blk-inner { font-size: 1.05em; }
+.blk.summary { font-size: 0.95em; }
+.blk.actions ul { list-style: none; padding-left: 0; }
+.blk.actions li { display: flex; align-items: baseline; gap: 4px; }
+.blk.actions li.checked { color: var(--muted); text-decoration: line-through; }
+.blk.callout { background: var(--surface); }
+.blk.terms .blk-inner { font-size: 0.95em; }
+.tldr-slot { max-width: var(--measure); margin-bottom: 28px; }
+
+/* bold word starts */
+.bw b { font-weight: 700; }
+.prose .bw { font-weight: 400; }
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .rail {
+    position: static; max-height: none; padding-block: 0; gap: 0;
+  }
+  .rail-inner { display: none; }
+  body.panel-open .rail-inner { display: flex; flex-direction: column; gap: 20px; padding-block: 16px 20px; border-bottom: 1px solid var(--line); }
+  .mobile-bar {
+    display: flex; align-items: center; gap: 12px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+    background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line);
+  }
+  .mobile-bar .progress-track { flex: 1; }
+  .rail { display: contents; }
+  .reader { padding-block: 16px 30vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+<style>
+{{FONT_CSS}}
+</style>
+
+<div class="shell">
+  <aside class="rail" aria-label="Reading tools">
+    <div class="mobile-bar">
+      <div class="progress-track"><div class="progress-fill" data-progress-fill></div></div>
+      <span class="progress-text" data-progress-short></span>
+      <button class="btn" id="panel-toggle" type="button" aria-expanded="false">Contents &amp; settings</button>
+    </div>
+    <div class="rail-inner">
+      <div class="progress">
+        <span class="eyebrow">Your progress</span>
+        <div class="progress-track"><div class="progress-fill" data-progress-fill></div></div>
+        <span class="progress-text" data-progress-long></span>
+      </div>
+      <nav aria-label="Contents">
+        <div class="eyebrow" style="margin-bottom:8px">Contents</div>
+        <ul class="toc" id="toc"></ul>
+      </nav>
+      <div class="settings">
+        <span class="eyebrow">Reading settings</span>
+        <div class="setting"><span>Text size</span>
+          <div class="seg" data-pref="fs">
+            <button type="button" id="fs-s" data-v="1rem">Small</button>
+            <button type="button" id="fs-m" data-v="1.125rem">Medium</button>
+            <button type="button" id="fs-l" data-v="1.3rem">Large</button>
+            <button type="button" id="fs-xl" data-v="1.5rem">Larger</button>
+          </div></div>
+        <div class="setting"><span>Line spacing</span>
+          <div class="seg" data-pref="lh">
+            <button type="button" id="lh-1" data-v="1.55">Normal</button>
+            <button type="button" id="lh-2" data-v="1.75">Relaxed</button>
+            <button type="button" id="lh-3" data-v="2.05">Airy</button>
+          </div></div>
+        <div class="setting"><span>Line length</span>
+          <div class="seg" data-pref="measure">
+            <button type="button" id="ms-1" data-v="52ch">Short</button>
+            <button type="button" id="ms-2" data-v="64ch">Medium</button>
+            <button type="button" id="ms-3" data-v="76ch">Long</button>
+          </div></div>
+        <div class="setting"><span>Font</span>
+          <div class="seg" data-pref="font">
+            <button type="button" id="ft-1" data-v="hyperlegible">Hyperlegible</button>
+            <button type="button" id="ft-2" data-v="system">System</button>
+            <button type="button" id="ft-3" data-v="dyslexic">OpenDyslexic</button>
+          </div></div>
+        <div class="setting"><span>Theme</span>
+          <div class="seg" data-pref="theme">
+            <button type="button" id="th-1" data-v="auto">Auto</button>
+            <button type="button" id="th-2" data-v="light">Light</button>
+            <button type="button" id="th-3" data-v="dark">Dark</button>
+          </div></div>
+        <div class="setting"><span>Focus mode dims every section except the one you're reading</span>
+          <div class="seg" data-pref="focus">
+            <button type="button" id="fo-1" data-v="off">Off</button>
+            <button type="button" id="fo-2" data-v="on">On</button>
+          </div></div>
+        <div class="setting" id="bw-setting"><span>Bold word starts</span>
+          <div class="seg" data-pref="bw">
+            <button type="button" id="bw-1" data-v="off">Off</button>
+            <button type="button" id="bw-2" data-v="on">On</button>
+          </div></div>
+        <button class="btn" type="button" id="reset-progress">Reset my progress</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="reader">
+    <header class="doc-head">
+      <span class="eyebrow">
+{{SOURCE}}
+      </span>
+      <h1 id="doc-title">
+{{TITLE}}
+      </h1>
+      <div class="meta" id="meta">
+        <span class="chip" id="chip-time"></span>
+        <span class="chip" id="chip-secs"></span>
+        <span class="chip" id="chip-fidelity">
+{{FIDELITY}}
+        </span>
+      </div>
+      <p class="legend"><span class="swatch" aria-hidden="true"></span>Amber boxes and headings tagged <span class="added-tag">added</span> were written to help you read. Everything else is the original text, word for word.</p>
+{{FRONTMATTER}}
+      <button class="btn resume" type="button" id="resume" hidden></button>
+    </header>
+    <div class="tldr-slot" id="tldr-slot"></div>
+    <div id="doc"></div>
+  </main>
+</div>
+
+<pre id="doc-src" hidden>
+{{DOC_MD}}
+</pre>
+<script type="application/json" id="wiki-links">
+{{WIKI_LINKS}}
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.16/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/text-vide@1.8.6/dist/index.iife.js"></script>
+<script>
+(function () {
+  // Technical prose reads at ~130 WPM. Denser text costs more per word: each
+  // word is weighted by its closest slow container, so every count below is in
+  // prose-equivalent words.
+  var WPM = 130;
+  var WEIGHTS = [['pre', 2.2], ['table', 1.5], ['code', 2], ['li', 1.25]];
+  var LABELS = {
+    tldr: 'The short version', summary: 'In short', actions: 'What you need to do',
+    terms: 'Key terms', callout: 'Note'
+  };
+
+  var store = {
+    get: function (k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  var hash = function (s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+  var esc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  var slugify = function (s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'section'; };
+  var words = function (el) {
+    var total = 0, walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), node;
+    while ((node = walk.nextNode())) {
+      var t = node.nodeValue.trim();
+      if (!t) continue;
+      var w = 1;
+      for (var i = 0; i < WEIGHTS.length; i++) {
+        if (node.parentElement.closest(WEIGHTS[i][0])) { w = WEIGHTS[i][1]; break; }
+      }
+      total += t.split(/\s+/).length * w;
+    }
+    return total;
+  };
+  var mins = function (w) { var m = w / WPM; return m < 0.5 ? '<1 min' : Math.max(1, Math.round(m)) + ' min'; };
+  var clean = function (html) { return window.DOMPurify ? DOMPurify.sanitize(html) : html; };
+  var md = function (s) { return window.marked ? marked.parse(s) : '<pre>' + esc(s) + '</pre>'; };
+
+  // [[target]], [[target|alias]], [[target#heading]] and ![[embeds]] become a
+  // placeholder span carrying readable text; after sanitizing, spans whose
+  // target adhd-links.py resolved become links. The map is built at render
+  // time, so obsidian:// and file:// hrefs are set here rather than passed
+  // through DOMPurify, which strips those schemes.
+  var LINKS = {};
+  try { LINKS = JSON.parse(document.getElementById('wiki-links').textContent) || {}; } catch (e) {}
+  var wikiText = function (line) {
+    return line.split(/(`[^`]*`)/).map(function (part, i) {
+      if (i % 2) return part;
+      return part.replace(/!?\[\[([^\[\]\n]+?)\]\]/g, function (all, inner) {
+        var bar = inner.indexOf('|');
+        // Inside a pipe table Obsidian escapes the alias bar as \|.
+        var ref = (bar < 0 ? inner : inner.slice(0, bar)).replace(/\\$/, '').trim();
+        var alias = bar < 0 ? '' : inner.slice(bar + 1).trim();
+        var hash = ref.indexOf('#');
+        var target = (hash < 0 ? ref : ref.slice(0, hash)).trim();
+        var heading = hash < 0 ? '' : ref.slice(hash + 1).replace(/^\^/, '').trim();
+        var label = alias || (target ? target.replace(/\.md$/, '') + (heading ? ' › ' + heading : '') : heading);
+        return '<span class="wikilink" data-target="' + esc(target).replace(/"/g, '&quot;') + '">' + esc(label) + '</span>';
+      });
+    }).join('');
+  };
+  var wireWikiLinks = function (root) {
+    root.querySelectorAll('span.wikilink').forEach(function (span) {
+      var hit = LINKS[span.getAttribute('data-target')];
+      if (!hit) { span.classList.add('unresolved'); span.title = 'Wiki note: ' + span.getAttribute('data-target'); return; }
+      var a = document.createElement('a');
+      a.className = 'wikilink'; a.href = hit.href; a.title = hit.title || ''; a.setAttribute('data-kind', hit.kind);
+      a.textContent = span.textContent;
+      span.parentNode.replaceChild(a, span);
+    });
+  };
+
+  var src = document.getElementById('doc-src').textContent.replace(/^\n/, '');
+  var KEY = 'adhd-format:' + hash(src);
+  var state = store.get(KEY, { done: {}, actions: {}, last: null });
+  state.done = state.done || {}; state.actions = state.actions || {};
+  var save = function () { store.set(KEY, state); };
+
+  // Split the markdown into plain segments and ::: added blocks; mark {+} headings.
+  var segs = [], buf = [], inCode = false, block = null;
+  src.split('\n').forEach(function (line) {
+    if (!block && /^\s*(```|~~~)/.test(line)) { inCode = !inCode; buf.push(line); return; }
+    if (inCode) { buf.push(line); return; }
+    if (block) {
+      if (/^:::\s*$/.test(line)) { segs.push(block); block = null; } else block.lines.push(wikiText(line));
+      return;
+    }
+    var open = line.match(/^:::\s*([a-z]+)\s*$/);
+    if (open) { segs.push({ kind: 'md', lines: buf }); buf = []; block = { kind: open[1], lines: [] }; return; }
+    buf.push(wikiText(line).replace(/^(\s{0,3}#{1,6}\s.*?)\s*\{\+\}\s*$/, '$1 <span class="added-tag">added</span>'));
+  });
+  if (block) segs.push(block);
+  segs.push({ kind: 'md', lines: buf });
+
+  var html = segs.map(function (s) {
+    var body = md(s.lines.join('\n'));
+    if (s.kind === 'md') return body;
+    return '<div class="blk ' + s.kind + '" data-blk="' + s.kind + '"><div class="blk-label">' +
+      esc(LABELS[s.kind] || s.kind) + ' <span class="added-tag">added</span></div><div class="blk-inner">' + body + '</div></div>';
+  }).join('\n');
+
+  var tmp = document.createElement('div');
+  tmp.innerHTML = clean(html);
+  wireWikiLinks(tmp);
+  tmp.querySelectorAll('table').forEach(function (t) {
+    var w = document.createElement('div'); w.className = 'table-wrap'; t.parentNode.insertBefore(w, t); w.appendChild(t);
+  });
+
+  // A leading tldr block is lifted above the sections.
+  var first = tmp.firstElementChild;
+  if (first && first.dataset.blk === 'tldr') document.getElementById('tldr-slot').appendChild(first);
+
+  // Group into sections at each h2 (h1 inside the body counts as h2).
+  var sections = [], cur = null, used = {};
+  Array.prototype.slice.call(tmp.children).forEach(function (el) {
+    if (el.tagName === 'H1' || el.tagName === 'H2') {
+      var h2 = document.createElement('h2'); h2.innerHTML = el.innerHTML; cur = { heading: h2, nodes: [] }; sections.push(cur); return;
+    }
+    if (!cur) { cur = { heading: null, nodes: [] }; sections.push(cur); }
+    cur.nodes.push(el);
+  });
+  sections = sections.filter(function (s) { return s.heading || s.nodes.length; });
+
+  var docEl = document.getElementById('doc');
+  var toc = document.getElementById('toc');
+  var actionIdx = 0, totalWords = 0;
+
+  sections.forEach(function (s, i) {
+    var label = s.heading ? s.heading.textContent.replace(/\s*added\s*$/, '').trim() : 'Start here';
+    var id = slugify(label); while (used[id]) id += '-' + i; used[id] = true;
+    s.id = id; s.label = label;
+
+    var sec = document.createElement('section'); sec.className = 'sec'; sec.id = id;
+    var head = document.createElement('div'); head.className = 'sec-head';
+    var h = s.heading || (function () { var x = document.createElement('h2'); x.textContent = label; return x; })();
+    head.appendChild(h);
+    var body = document.createElement('div'); body.className = 'sec-body prose';
+    s.nodes.forEach(function (n) { body.appendChild(n); });
+    s.words = words(body); totalWords += s.words;
+    var m = document.createElement('span'); m.className = 'mins'; m.textContent = mins(s.words); head.appendChild(m);
+
+    var foot = document.createElement('div'); foot.className = 'sec-foot';
+    var doneBtn = document.createElement('button'); doneBtn.type = 'button'; doneBtn.className = 'btn primary'; doneBtn.id = 'done-' + id;
+    foot.appendChild(doneBtn);
+    sec.appendChild(head); sec.appendChild(body); sec.appendChild(foot);
+    docEl.appendChild(sec);
+    s.el = sec; s.btn = doneBtn;
+
+    var li = document.createElement('li');
+    li.innerHTML = '<a href="#' + id + '"><span class="tick" aria-hidden="true"></span><span class="label"></span><span class="mins"></span></a>';
+    li.querySelector('.label').textContent = label;
+    li.querySelector('.mins').textContent = mins(s.words);
+    toc.appendChild(li); s.li = li;
+
+    doneBtn.addEventListener('click', function () {
+      var wasDone = !!state.done[id];
+      state.done[id] = !wasDone; if (wasDone) delete state.done[id];
+      save(); paint();
+      if (!wasDone) {
+        var next = sections[i + 1];
+        (next ? next.el : sec).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+
+    // Action checkboxes are live and remembered.
+    body.querySelectorAll('.blk.actions li').forEach(wireAction);
+  });
+  document.querySelectorAll('#tldr-slot .blk.actions li').forEach(wireAction);
+
+  function wireAction(li) {
+    var box = li.querySelector('input[type="checkbox"]');
+    var k = 'a' + (actionIdx++);
+    if (!box) { box = document.createElement('input'); box.type = 'checkbox'; li.insertBefore(box, li.firstChild); }
+    box.disabled = false; box.id = 'act-' + k;
+    box.checked = !!state.actions[k];
+    li.classList.toggle('checked', box.checked);
+    box.addEventListener('change', function () {
+      if (box.checked) state.actions[k] = true; else delete state.actions[k];
+      li.classList.toggle('checked', box.checked); save();
+    });
+  }
+
+  function paint() {
+    var doneCount = 0, leftWords = 0;
+    sections.forEach(function (s, i) {
+      var d = !!state.done[s.id];
+      if (d) doneCount++; else leftWords += s.words;
+      s.el.classList.toggle('done', d);
+      s.li.classList.toggle('is-done', d);
+      s.li.querySelector('.tick').textContent = d ? '✓' : String(i + 1);
+      s.btn.textContent = d ? 'Show this section again' : (i < sections.length - 1 ? 'Done — next section' : 'Done — finished');
+    });
+    var pct = sections.length ? Math.round(doneCount / sections.length * 100) : 0;
+    document.querySelectorAll('[data-progress-fill]').forEach(function (f) { f.style.width = pct + '%'; });
+    var left = leftWords ? mins(leftWords) + ' left' : 'All done';
+    document.querySelectorAll('[data-progress-long]').forEach(function (t) {
+      t.innerHTML = '<strong>' + doneCount + ' of ' + sections.length + '</strong> sections done · ' + esc(left);
+    });
+    document.querySelectorAll('[data-progress-short]').forEach(function (t) { t.textContent = doneCount + '/' + sections.length; });
+  }
+  paint();
+
+  document.getElementById('chip-time').textContent = mins(totalWords + words(document.getElementById('tldr-slot'))) + ' read';
+  document.getElementById('chip-secs').textContent = sections.length + (sections.length === 1 ? ' section' : ' sections');
+  var fid = document.getElementById('chip-fidelity');
+  if (/^\s*Wording verified/.test(fid.textContent)) fid.classList.add('ok');
+  else if (fid.textContent.trim()) fid.classList.add('warn');
+  else fid.hidden = true;
+
+  // Track the current section for focus mode, the contents highlight, and "pick up where you left off".
+  var currentId = null;
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) setCurrent(e.target.id); });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+    sections.forEach(function (s) { io.observe(s.el); });
+  }
+  function setCurrent(id) {
+    if (id === currentId) return; currentId = id;
+    sections.forEach(function (s) {
+      var on = s.id === id;
+      s.el.classList.toggle('current', on);
+      s.li.querySelector('a').classList.toggle('active', on);
+    });
+    state.last = id; save();
+  }
+  if (sections[0]) setCurrent(sections[0].id);
+
+  var resume = document.getElementById('resume');
+  var lastSec = sections.filter(function (s) { return s.id === store.get(KEY, {}).last; })[0];
+  if (lastSec && lastSec !== sections[0]) {
+    resume.textContent = 'Pick up where you left off: ' + lastSec.label;
+    resume.hidden = false;
+    resume.addEventListener('click', function () { lastSec.el.scrollIntoView({ behavior: 'smooth', block: 'start' }); resume.hidden = true; });
+  }
+
+  // Bold word starts: wrap text nodes, keep the originals to restore.
+  var bwNodes = [];
+  function bwOn() {
+    if (!window.textVide || bwNodes.length) return;
+    var roots = document.querySelectorAll('.prose, .blk-inner');
+    roots.forEach(function (root) {
+      var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (n) {
+          if (!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          if (n.parentElement.closest('pre, code, .added-tag, .bw')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var list = []; while (walker.nextNode()) list.push(walker.currentNode);
+      list.forEach(function (n) {
+        var span = document.createElement('span'); span.className = 'bw';
+        span.innerHTML = textVide.textVide(esc(n.nodeValue), { sep: ['<b>', '</b>'] });
+        n.parentNode.replaceChild(span, n); bwNodes.push({ span: span, text: n });
+      });
+    });
+  }
+  function bwOff() {
+    bwNodes.forEach(function (p) { if (p.span.parentNode) p.span.parentNode.replaceChild(p.text, p.span); });
+    bwNodes = [];
+  }
+  if (!window.textVide) document.getElementById('bw-setting').hidden = true;
+
+  // Reading settings.
+  var PKEY = 'adhd-format:prefs';
+  var prefs = store.get(PKEY, {});
+  var DEFAULTS = { fs: '1.125rem', lh: '1.75', measure: '64ch', font: 'hyperlegible', theme: 'auto', focus: 'off', bw: 'off' };
+  var root = document.documentElement;
+  function apply(k, v) {
+    if (k === 'fs') root.style.setProperty('--fs', v);
+    if (k === 'lh') root.style.setProperty('--lh', v);
+    if (k === 'measure') root.style.setProperty('--measure', v);
+    if (k === 'font') {
+      root.style.setProperty('--font-read', v === 'dyslexic' ? '"OpenDyslexic", var(--font-body)' : v === 'system' ? 'system-ui, -apple-system, "Segoe UI", sans-serif' : 'var(--font-body)');
+      root.style.setProperty('--ws', v === 'dyslexic' ? '0.08em' : '0em');
+    }
+    if (k === 'theme') { if (v === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', v); }
+    if (k === 'focus') document.body.classList.toggle('focus', v === 'on');
+    if (k === 'bw') { if (v === 'on') bwOn(); else bwOff(); }
+    document.querySelectorAll('.seg[data-pref="' + k + '"] button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.v === v ? 'true' : 'false');
+    });
+  }
+  Object.keys(DEFAULTS).forEach(function (k) { apply(k, prefs[k] || DEFAULTS[k]); });
+  document.querySelectorAll('.seg[data-pref]').forEach(function (seg) {
+    seg.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      var k = seg.dataset.pref; prefs[k] = b.dataset.v; store.set(PKEY, prefs); apply(k, b.dataset.v);
+    });
+  });
+
+  document.getElementById('reset-progress').addEventListener('click', function () {
+    state = { done: {}, actions: {}, last: null }; save();
+    document.querySelectorAll('.blk.actions input[type="checkbox"]').forEach(function (b) { b.checked = false; b.closest('li').classList.remove('checked'); });
+    paint();
+  });
+
+  var pt = document.getElementById('panel-toggle');
+  pt.addEventListener('click', function () {
+    var open = document.body.classList.toggle('panel-open'); pt.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  toc.addEventListener('click', function (e) {
+    if (e.target.closest('a') && document.body.classList.contains('panel-open')) { document.body.classList.remove('panel-open'); pt.setAttribute('aria-expanded', 'false'); }
+  });
+})();
+</script>
